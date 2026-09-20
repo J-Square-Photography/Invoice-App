@@ -61,7 +61,7 @@ function DialogContent({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/80 animate-in fade-in-0"
@@ -70,7 +70,7 @@ function DialogContent({
       {/* Content */}
       <div
         className={cn(
-          'relative z-50 w-full max-w-lg rounded-lg border border-neutral-200 bg-white p-6 shadow-lg',
+          'relative z-50 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg border border-neutral-200 bg-white p-6 shadow-lg',
           className
         )}
         {...props}

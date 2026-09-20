@@ -9,6 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 import { PROJECT_TYPE_LABELS } from '@/lib/constants';
@@ -40,7 +48,10 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Edit Form State
   const [editForm, setEditForm] = useState({
     title: '',
@@ -114,8 +125,20 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const openEditDialog = () => {
+    if (!project) return;
+    setEditForm({
+      title: project.title,
+      projectType: project.projectType,
+      shootDate: project.shootDate ? new Date(project.shootDate).toISOString().split('T')[0] : '',
+      notes: project.notes || ''
+    });
+    setIsEditing(true);
+  };
+
   const handleUpdateDetails = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
     try {
       const res = await fetch(`/api/projects/${projectId}`, {
         method: 'PATCH',
@@ -138,14 +161,13 @@ export default function ProjectDetailPage() {
       }
     } catch (err) {
       toast({ title: 'Error', description: 'Failed to update details', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
-      return;
-    }
-    
+    setIsDeleting(true);
     try {
       const res = await fetch(`/api/projects/${projectId}`, {
         method: 'DELETE',
@@ -156,9 +178,13 @@ export default function ProjectDetailPage() {
         router.push('/admin/projects');
       } else {
         toast({ title: 'Error', description: 'Failed to delete project', variant: 'destructive' });
+        setIsDeleting(false);
+        setIsDeleteDialogOpen(false);
       }
     } catch (err) {
       toast({ title: 'Error', description: 'Failed to delete project', variant: 'destructive' });
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
     }
   };
 
@@ -184,20 +210,12 @@ export default function ProjectDetailPage() {
           <h1 className="text-2xl font-bold">{project.title}</h1>
         </div>
         <div className="flex items-center gap-2">
-          {!isEditing ? (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="gap-2">
-                <Pencil className="h-4 w-4" /> Edit
-              </Button>
-              <Button variant="destructive" size="sm" onClick={handleDelete} className="gap-2">
-                <Trash2 className="h-4 w-4" /> Delete
-              </Button>
-            </>
-          ) : (
-            <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
-              Cancel Editing
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={openEditDialog} className="gap-2">
+            <Pencil className="h-4 w-4" /> Edit
+          </Button>
+          <Button variant="destructive" size="sm" onClick={() => setIsDeleteDialogOpen(true)} className="gap-2">
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
         </div>
       </div>
 
@@ -233,60 +251,7 @@ export default function ProjectDetailPage() {
           <div className="bg-white border rounded-lg p-6 shadow-sm">
             <h2 className="text-lg font-semibold mb-4">Project Details</h2>
             
-            {isEditing ? (
-              <form onSubmit={handleUpdateDetails} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Title</Label>
-                  <Input 
-                    id="title" 
-                    value={editForm.title} 
-                    onChange={(e) => setEditForm({...editForm, title: e.target.value})} 
-                    required 
-                  />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="projectType">Type</Label>
-                    <select
-                      id="projectType"
-                      value={editForm.projectType}
-                      onChange={(e) => setEditForm({...editForm, projectType: e.target.value})}
-                      className="flex h-10 w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
-                      required
-                    >
-                      {Object.entries(PROJECT_TYPE_LABELS || {}).map(([key, label]) => (
-                        <option key={key} value={key}>{label as string}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="shootDate">Shoot Date</Label>
-                    <Input 
-                      id="shootDate" 
-                      type="date" 
-                      value={editForm.shootDate} 
-                      onChange={(e) => setEditForm({...editForm, shootDate: e.target.value})} 
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea 
-                    id="notes" 
-                    value={editForm.notes} 
-                    onChange={(e) => setEditForm({...editForm, notes: e.target.value})} 
-                    rows={4}
-                  />
-                </div>
-
-                <div className="pt-4 flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
-                  <Button type="submit">Save Changes</Button>
-                </div>
-              </form>
-            ) : (
+            <div>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-y-4">
                   <div>
@@ -322,7 +287,7 @@ export default function ProjectDetailPage() {
                   </div>
                 )}
               </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -374,6 +339,94 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Edit Project Dialog */}
+      <Dialog open={isEditing} onOpenChange={setIsEditing}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+            <DialogDescription>
+              Update the details for {project.title}.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateDetails} className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="title">Project Title *</Label>
+              <Input
+                id="title"
+                value={editForm.title}
+                onChange={(e) => setEditForm({...editForm, title: e.target.value})}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="projectType">Project Type *</Label>
+                <select
+                  id="projectType"
+                  value={editForm.projectType}
+                  onChange={(e) => setEditForm({...editForm, projectType: e.target.value})}
+                  className="flex h-10 w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
+                  required
+                >
+                  {Object.entries(PROJECT_TYPE_LABELS || {}).map(([key, label]) => (
+                    <option key={key} value={key}>{label as string}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="shootDate">Shoot Date</Label>
+                <Input
+                  id="shootDate"
+                  type="date"
+                  value={editForm.shootDate}
+                  onChange={(e) => setEditForm({...editForm, shootDate: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                value={editForm.notes}
+                onChange={(e) => setEditForm({...editForm, notes: e.target.value})}
+                rows={4}
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsEditing(false)} disabled={isSaving}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete this project?</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete <strong>{project.title}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-2">
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? 'Deleting...' : 'Delete Project'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

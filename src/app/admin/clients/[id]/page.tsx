@@ -19,7 +19,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { Loader2, ArrowLeft, Building2, Edit, Trash2, Plus, Calendar, Save, X } from 'lucide-react';
+import { Loader2, ArrowLeft, Building2, Edit, Trash2, Plus, Calendar } from 'lucide-react';
 import { PROJECT_TYPE_LABELS, PIPELINE_STATUS_LABELS } from '@/lib/constants';
 
 interface Project {
@@ -43,6 +43,26 @@ interface ClientDetail {
   projects: Project[];
 }
 
+interface ClientForm {
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  uen: string;
+  socials: string;
+  internalNotes: string;
+}
+
+const toForm = (c: ClientDetail): ClientForm => ({
+  companyName: c.companyName || '',
+  contactName: c.contactName || '',
+  email: c.email || '',
+  phone: c.phone || '',
+  uen: c.uen || '',
+  socials: c.socials || '',
+  internalNotes: c.internalNotes || '',
+});
+
 export default function ClientDetailPage() {
   const params = useParams();
   const id = params?.id as string;
@@ -51,12 +71,12 @@ export default function ClientDetailPage() {
 
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  
-  // Edit state
-  const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState<Partial<ClientDetail>>({});
+
+  // Edit dialog state
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editData, setEditData] = useState<ClientForm | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  
+
   // Delete state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -78,9 +98,7 @@ export default function ClientDetailPage() {
       const res = await fetch(`/api/clients/${id}`);
       if (!res.ok) throw new Error('Failed to fetch client');
       const data = await res.json();
-      const clientData = data.client || data;
-      setClient(clientData);
-      setEditData(clientData);
+      setClient(data.client || data);
     } catch (error) {
       toast({
         title: 'Error',
@@ -96,12 +114,20 @@ export default function ClientDetailPage() {
     fetchClient();
   }, [id]);
 
-  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setEditData(prev => ({ ...prev, [name]: value }));
+  const openEditDialog = () => {
+    if (!client) return;
+    setEditData(toForm(client));
+    setIsEditDialogOpen(true);
   };
 
-  const saveClient = async () => {
+  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setEditData(prev => (prev ? { ...prev, [name]: value } : prev));
+  };
+
+  const saveClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editData) return;
     try {
       setIsSaving(true);
       const res = await fetch(`/api/clients/${id}`, {
@@ -111,11 +137,11 @@ export default function ClientDetailPage() {
       });
 
       if (!res.ok) throw new Error('Failed to update client');
-      
+
       const updatedData = await res.json();
       const clientData = updatedData.client || updatedData;
       setClient(prev => prev ? { ...prev, ...clientData } : clientData);
-      setIsEditing(false);
+      setIsEditDialogOpen(false);
       toast({
         title: 'Success',
         description: 'Client details updated.',
@@ -139,7 +165,7 @@ export default function ClientDetailPage() {
       });
 
       if (!res.ok) throw new Error('Failed to delete client');
-      
+
       toast({
         title: 'Success',
         description: 'Client deleted.',
@@ -170,7 +196,7 @@ export default function ClientDetailPage() {
       });
 
       if (!res.ok) throw new Error('Failed to create project');
-      
+
       toast({
         title: 'Success',
         description: 'Project created successfully.',
@@ -243,32 +269,14 @@ export default function ClientDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isEditing ? (
-            <>
-              <Button variant="outline" onClick={() => {
-                setIsEditing(false);
-                setEditData(client);
-              }}>
-                <X className="mr-2 h-4 w-4" />
-                Cancel
-              </Button>
-              <Button onClick={saveClient} disabled={isSaving}>
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Save
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => setIsEditing(true)}>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </Button>
-              <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </Button>
-            </>
-          )}
+          <Button variant="outline" onClick={openEditDialog}>
+            <Edit className="mr-2 h-4 w-4" />
+            Edit
+          </Button>
+          <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)}>
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </Button>
         </div>
       </div>
 
@@ -282,55 +290,31 @@ export default function ClientDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Company Name</Label>
-                  {isEditing ? (
-                    <Input name="companyName" value={editData.companyName || ''} onChange={handleEditChange} />
-                  ) : (
-                    <div className="font-medium">{client.companyName}</div>
-                  )}
+                  <div className="font-medium">{client.companyName}</div>
                 </div>
                 <div className="space-y-2">
                   <Label>Contact Name</Label>
-                  {isEditing ? (
-                    <Input name="contactName" value={editData.contactName || ''} onChange={handleEditChange} />
-                  ) : (
-                    <div className="font-medium">{client.contactName}</div>
-                  )}
+                  <div className="font-medium">{client.contactName}</div>
                 </div>
                 <div className="space-y-2">
                   <Label>Email</Label>
-                  {isEditing ? (
-                    <Input name="email" type="email" value={editData.email || ''} onChange={handleEditChange} />
-                  ) : (
-                    <div className="font-medium"><a href={`mailto:${client.email}`} className="text-primary hover:underline">{client.email}</a></div>
-                  )}
+                  <div className="font-medium"><a href={`mailto:${client.email}`} className="text-primary hover:underline">{client.email}</a></div>
                 </div>
                 <div className="space-y-2">
                   <Label>Phone</Label>
-                  {isEditing ? (
-                    <Input name="phone" type="tel" value={editData.phone || ''} onChange={handleEditChange} />
-                  ) : (
-                    <div className="font-medium">{client.phone || '-'}</div>
-                  )}
+                  <div className="font-medium">{client.phone || '-'}</div>
                 </div>
                 <div className="space-y-2">
                   <Label>UEN</Label>
-                  {isEditing ? (
-                    <Input name="uen" value={editData.uen || ''} onChange={handleEditChange} />
-                  ) : (
-                    <div className="font-medium">{client.uen || '-'}</div>
-                  )}
+                  <div className="font-medium">{client.uen || '-'}</div>
                 </div>
                 <div className="space-y-2">
                   <Label>Socials / Links</Label>
-                  {isEditing ? (
-                    <Input name="socials" value={editData.socials || ''} onChange={handleEditChange} />
-                  ) : (
-                    <div className="font-medium">{client.socials ? (
-                      <a href={client.socials.startsWith('http') ? client.socials : `https://${client.socials}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                        {client.socials}
-                      </a>
-                    ) : '-'}</div>
-                  )}
+                  <div className="font-medium">{client.socials ? (
+                    <a href={client.socials.startsWith('http') ? client.socials : `https://${client.socials}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      {client.socials}
+                    </a>
+                  ) : '-'}</div>
                 </div>
               </div>
             </CardContent>
@@ -389,34 +373,86 @@ export default function ClientDetailPage() {
               <CardTitle>Internal Notes</CardTitle>
             </CardHeader>
             <CardContent>
-              {isEditing ? (
-                <Textarea 
-                  name="internalNotes" 
-                  value={editData.internalNotes || ''} 
-                  onChange={handleEditChange}
-                  className="min-h-[150px]"
-                  placeholder="Add notes about this client..."
-                />
-              ) : (
-                <div className="whitespace-pre-wrap text-sm">
-                  {client.internalNotes || <span className="text-muted-foreground italic">No internal notes.</span>}
-                </div>
-              )}
+              <div className="whitespace-pre-wrap text-sm">
+                {client.internalNotes || <span className="text-muted-foreground italic">No internal notes.</span>}
+              </div>
             </CardContent>
           </Card>
         </div>
       </div>
 
+      {/* Edit Client Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Client</DialogTitle>
+            <DialogDescription>
+              Update the details for {client.companyName}.
+            </DialogDescription>
+          </DialogHeader>
+          {editData && (
+            <form onSubmit={saveClient} className="space-y-4 py-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-companyName">Company Name *</Label>
+                  <Input id="edit-companyName" name="companyName" required value={editData.companyName} onChange={handleEditChange} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-contactName">Contact Name *</Label>
+                  <Input id="edit-contactName" name="contactName" required value={editData.contactName} onChange={handleEditChange} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-email">Email *</Label>
+                  <Input id="edit-email" name="email" type="email" required value={editData.email} onChange={handleEditChange} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-phone">Phone</Label>
+                  <Input id="edit-phone" name="phone" type="tel" value={editData.phone} onChange={handleEditChange} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-uen">UEN</Label>
+                  <Input id="edit-uen" name="uen" value={editData.uen} onChange={handleEditChange} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-socials">Socials / Links</Label>
+                  <Input id="edit-socials" name="socials" placeholder="e.g. instagram.com/company" value={editData.socials} onChange={handleEditChange} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-internalNotes">Internal Notes</Label>
+                <Textarea
+                  id="edit-internalNotes"
+                  name="internalNotes"
+                  value={editData.internalNotes}
+                  onChange={handleEditChange}
+                  rows={4}
+                  placeholder="Add notes about this client..."
+                />
+              </div>
+              <DialogFooter className="pt-2">
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isSaving}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSaving}>
+                  {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Are you absolutely sure?</DialogTitle>
             <DialogDescription>
               This action cannot be undone. This will permanently delete <strong>{client.companyName}</strong> and all associated data. Any linked projects might be affected depending on database constraints.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeleting}>Cancel</Button>
             <Button variant="destructive" onClick={deleteClient} disabled={isDeleting}>
               {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete Client'}
@@ -434,23 +470,23 @@ export default function ClientDetailPage() {
               Create a new project for {client.companyName}.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleCreateProject}>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="title">Project Title *</Label>
-                <Input 
-                  id="title" 
-                  required 
-                  value={projectData.title} 
-                  onChange={(e) => setProjectData({...projectData, title: e.target.value})} 
-                  placeholder="e.g. Q3 Corporate Headshots"
-                />
-              </div>
-              <div className="grid gap-2">
+          <form onSubmit={handleCreateProject} className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="title">Project Title *</Label>
+              <Input
+                id="title"
+                required
+                value={projectData.title}
+                onChange={(e) => setProjectData({...projectData, title: e.target.value})}
+                placeholder="e.g. Q3 Corporate Headshots"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
                 <Label htmlFor="projectType">Project Type *</Label>
-                <Select 
+                <Select
                   id="projectType"
-                  value={projectData.projectType} 
+                  value={projectData.projectType}
                   onChange={(e) => setProjectData({...projectData, projectType: e.target.value})}
                 >
                   {Object.entries(PROJECT_TYPE_LABELS).map(([key, label]) => (
@@ -458,26 +494,26 @@ export default function ClientDetailPage() {
                   ))}
                 </Select>
               </div>
-              <div className="grid gap-2">
+              <div className="space-y-2">
                 <Label htmlFor="shootDate">Shoot Date</Label>
-                <Input 
-                  id="shootDate" 
-                  type="date" 
-                  value={projectData.shootDate} 
-                  onChange={(e) => setProjectData({...projectData, shootDate: e.target.value})} 
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="notes">Initial Notes</Label>
-                <Textarea 
-                  id="notes" 
-                  value={projectData.notes} 
-                  onChange={(e) => setProjectData({...projectData, notes: e.target.value})} 
-                  placeholder="Brief requirements, location, etc."
+                <Input
+                  id="shootDate"
+                  type="date"
+                  value={projectData.shootDate}
+                  onChange={(e) => setProjectData({...projectData, shootDate: e.target.value})}
                 />
               </div>
             </div>
-            <DialogFooter>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Initial Notes</Label>
+              <Textarea
+                id="notes"
+                value={projectData.notes}
+                onChange={(e) => setProjectData({...projectData, notes: e.target.value})}
+                placeholder="Brief requirements, location, etc."
+              />
+            </div>
+            <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => setIsProjectDialogOpen(false)} disabled={isCreatingProject}>
                 Cancel
               </Button>

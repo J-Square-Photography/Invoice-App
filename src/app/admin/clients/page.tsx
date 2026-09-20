@@ -207,45 +207,45 @@ export default function ClientsPage() {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Client</DialogTitle>
             <DialogDescription>
               Enter the client details below. Click save when you're done.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleCreate}>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
+          <form onSubmit={handleCreate} className="space-y-4 py-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
                 <Label htmlFor="companyName">Company Name *</Label>
                 <Input id="companyName" name="companyName" required value={formData.companyName} onChange={handleInputChange} />
               </div>
-              <div className="grid gap-2">
+              <div className="space-y-2">
                 <Label htmlFor="contactName">Contact Name *</Label>
                 <Input id="contactName" name="contactName" required value={formData.contactName} onChange={handleInputChange} />
               </div>
-              <div className="grid gap-2">
+              <div className="space-y-2">
                 <Label htmlFor="email">Email *</Label>
                 <Input id="email" name="email" type="email" required value={formData.email} onChange={handleInputChange} />
               </div>
-              <div className="grid gap-2">
+              <div className="space-y-2">
                 <Label htmlFor="phone">Phone</Label>
                 <Input id="phone" name="phone" type="tel" value={formData.phone} onChange={handleInputChange} />
               </div>
-              <div className="grid gap-2">
+              <div className="space-y-2">
                 <Label htmlFor="uen">UEN</Label>
                 <Input id="uen" name="uen" value={formData.uen} onChange={handleInputChange} />
               </div>
-              <div className="grid gap-2">
+              <div className="space-y-2">
                 <Label htmlFor="socials">Socials / Links</Label>
                 <Input id="socials" name="socials" placeholder="e.g. instagram.com/company" value={formData.socials} onChange={handleInputChange} />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="internalNotes">Internal Notes</Label>
-                <Textarea id="internalNotes" name="internalNotes" value={formData.internalNotes} onChange={handleInputChange} />
-              </div>
             </div>
-            <DialogFooter>
+            <div className="space-y-2">
+              <Label htmlFor="internalNotes">Internal Notes</Label>
+              <Textarea id="internalNotes" name="internalNotes" rows={4} value={formData.internalNotes} onChange={handleInputChange} />
+            </div>
+            <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isCreating}>
                 Cancel
               </Button>

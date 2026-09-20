@@ -5,8 +5,26 @@ import { PrismaClient } from '@prisma/client';
 // (arithmetic, .toFixed(), JSON responses, PDF generation). This extension
 // converts Decimal <-> number at the client boundary so no other file has to
 // deal with Decimal objects directly.
+// A connection_limit of 1 (a common serverless recommendation) makes pages that
+// run several queries at once queue behind a single connection and time out
+// (P2024). Enforce a small pool here so it doesn't depend on the env var.
+function databaseUrl(): string | undefined {
+  const raw = process.env.DATABASE_URL;
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    url.searchParams.set('connection_limit', '5');
+    url.searchParams.set('pool_timeout', '20');
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
 function createPrismaClient() {
-  return new PrismaClient().$extends({
+  const url = databaseUrl();
+  const base = url ? new PrismaClient({ datasources: { db: { url } } }) : new PrismaClient();
+  return base.$extends({
     result: {
       invoice: {
         subtotal: { needs: { subtotal: true }, compute: (invoice) => Number(invoice.subtotal) },

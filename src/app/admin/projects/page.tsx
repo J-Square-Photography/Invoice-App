@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
@@ -263,11 +263,14 @@ export default function ProjectsListPage() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Project</DialogTitle>
+            <DialogDescription>
+              Set up a new project for a client. You can raise invoices and contracts against it afterwards.
+            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleCreateProject} className="space-y-4 mt-4">
+          <form onSubmit={handleCreateProject} className="space-y-4 py-2">
             
             <div className="relative">
               <Label>Client</Label>
@@ -364,14 +367,14 @@ export default function ProjectsListPage() {
               />
             </div>
 
-            <div className="flex justify-end pt-4 gap-2">
+            <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit">
                 Create Project
               </Button>
-            </div>
+            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

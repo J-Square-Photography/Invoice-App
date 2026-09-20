@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AutoRefresh } from '@/components/auto-refresh';
 import { Users, FolderKanban, FileText, DollarSign, ArrowRight, Plus, Building2 } from 'lucide-react';
 import { PROJECT_TYPE_LABELS, INVOICE_STATUS_LABELS } from '@/lib/constants';
 
@@ -16,6 +17,7 @@ export default async function DashboardPage() {
   let recentProjects: any[] = [];
   let recentClients: any[] = [];
   let recentInvoices: any[] = [];
+  let loadFailed = false;
 
   try {
     const [
@@ -68,11 +70,12 @@ export default async function DashboardPage() {
     clientCount = cCount;
     activeProjectCount = pCount;
     pendingInvoiceCount = iCount;
-    totalCollected = totalPaidResult._sum.paidAmount || 0;
+    totalCollected = Number(totalPaidResult._sum.paidAmount ?? 0);
     recentProjects = rProjects;
     recentClients = rClients;
     recentInvoices = rInvoices;
   } catch (err) {
+    loadFailed = true;
     console.error('Failed to load dashboard metrics:', err);
   }
 
@@ -108,6 +111,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      <AutoRefresh />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
@@ -131,6 +135,12 @@ export default async function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      {loadFailed && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Couldn&apos;t load the latest data, so the numbers below may be out of date. Refresh the page to try again.
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
