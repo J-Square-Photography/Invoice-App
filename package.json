@@ -1,0 +1,51 @@
+{
+  "name": "jsquare-crm",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "test:e2e": "tsx scratch/master_e2e_test.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@react-pdf/renderer": "^4.9.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.6.2",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "bcryptjs": "^3.0.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "jose": "^6.2.12",
+    "lucide-react": "^1.47.0",
+    "next": "^16.3.5",
+    "pdf-lib": "^1.17.1",
+    "postcss": "^8.5.28",
+    "prisma": "^5.22.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "tsx": "^4.23.15"
+  },
+  "allowScripts": {
+    "prisma@5.22.0": true,
+    "@prisma/client@5.22.0": true,
+    "@prisma/engines@5.22.0": true
+  }
+}

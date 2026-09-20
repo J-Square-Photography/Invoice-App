@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("MANAGER") // SUPER_ADMIN or MANAGER
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Client {
+  id            String    @id @default(uuid())
+  companyName   String
+  contactName   String
+  email         String    @unique
+  phone         String?
+  uen           String?
+  socials       String?
+  internalNotes String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  projects      Project[]
+
+  @@map("clients")
+}
+
+model Project {
+  id             String    @id @default(uuid())
+  clientId       String
+  client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title          String
+  projectType    String    @default("PORTRAIT") // PORTRAIT, COMMERCIAL_VIDEO, WORKSHOP, EVENT, OTHER
+  pipelineStatus String    @default("INQUIRY")  // INQUIRY, QUOTED, BOOKED, IN_PROGRESS, DELIVERED, CLOSED
+  shootDate      DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  invoices       Invoice[]
+
+  @@map("projects")
+}
+
+model Invoice {
+  id                  String              @id @default(uuid())
+  projectId           String
+  project             Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invoiceNumber       String              @unique
+  subtotal            Float               @default(0)
+  isGstApplied        Boolean             @default(true)
+  gstRate             Float               @default(9)
+  gstAmount           Float               @default(0)
+  totalAmount         Float               @default(0)
+  paidAmount          Float               @default(0)
+  balanceDue          Float               @default(0)
+  issueDate           DateTime            @default(now())
+  dueDate             DateTime
+  status              String              @default("DRAFT") // DRAFT, SENT, PARTIAL, PAID, VOID
+  paymentMethod       String?             // BANK_TRANSFER, PAYNOW_UEN, PAYNOW_QR
+  notes               String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  items               InvoiceItem[]
+  paymentLogs         PaymentLog[]
+  contract            Contract?
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Float
+  amount      Float
+
+  @@map("invoice_items")
+}
+
+model PaymentLog {
+  id             String   @id @default(uuid())
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amountPaid     Float
+  paymentDate    DateTime @default(now())
+  paymentMethod  String?
+  transactionRef String?
+  notes          String?
+  recordedBy     String?
+  createdAt      DateTime @default(now())
+
+  @@map("payment_logs")
+}
+
+model Contract {
+  id             String          @id @default(uuid())
+  invoiceId      String          @unique
+  invoice        Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  title          String
+  contractBody   String
+  signingToken   String          @unique
+  tokenExpiresAt DateTime
+  isSigned       Boolean         @default(false)
+  signedAt       DateTime?
+  finalPdfUrl    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  signatureAudit SignatureAudit?
+
+  @@map("contracts")
+}
+
+model SignatureAudit {
+  id                  String   @id @default(uuid())
+  contractId          String   @unique
+  contract            Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  signatureImageBase64 String
+  signerName          String
+  signerEmail         String?
+  signerIp            String
+  userAgent           String
+  documentSha256      String
+  signedUtcTimestamp  DateTime
+  intentConfirmed     Boolean  @default(false)
+
+  @@map("signature_audits")
+}
