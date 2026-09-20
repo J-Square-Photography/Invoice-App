@@ -14,6 +14,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden. Super Admin only.' }, { status: 403 });
   }
 
+  if (process.env.ALLOW_TEST_DATA_CLEANUP !== 'true') {
+    return NextResponse.json(
+      {
+        error:
+          'Test data cleanup is disabled. Set ALLOW_TEST_DATA_CLEANUP=true in this environment to enable it. Never enable this in production.',
+      },
+      { status: 403 }
+    );
+  }
+
   try {
     // 1. Find test managers (excluding the logged in user)
     const testUsers = await prisma.user.findMany({

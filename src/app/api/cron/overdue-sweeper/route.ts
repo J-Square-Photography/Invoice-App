@@ -19,8 +19,8 @@ export async function POST(request: NextRequest) {
 async function handleSweeper(request: NextRequest) {
   // 1. Authenticate: Check for Vercel CRON_SECRET or Admin Session
   const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET || 'jsquare-cron-secret-change-in-production';
-  const isCronAuthorized = authHeader === `Bearer ${cronSecret}`;
+  const cronSecret = process.env.CRON_SECRET;
+  const isCronAuthorized = Boolean(cronSecret) && authHeader === `Bearer ${cronSecret}`;
 
   let user = null;
   if (!isCronAuthorized) {

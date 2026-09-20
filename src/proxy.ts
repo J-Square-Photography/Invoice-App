@@ -2,13 +2,17 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'dev-secret-change-in-production-at-least-32-characters-long'
-);
+if (!process.env.JWT_SECRET) {
+  throw new Error(
+    'JWT_SECRET environment variable is required. Generate one with `openssl rand -hex 32` and set it in .env.local (see .env.example).'
+  );
+}
+
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
 const COOKIE_NAME = 'jsquare-session';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Protect all /admin routes
@@ -23,7 +27,7 @@ export async function middleware(request: NextRequest) {
 
     try {
       const { payload } = await jwtVerify(token, JWT_SECRET);
-      
+
       // Check if user is active (role check)
       if (!payload.role) {
         throw new Error('Invalid token payload');

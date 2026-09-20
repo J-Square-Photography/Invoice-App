@@ -38,6 +38,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Scratch / ad-hoc debug scripts and generated artifacts (never commit these —
+# they have historically contained live credentials and test PDFs)
+/scratch/
+-s
+
 # Prisma
 prisma/dev.db
 prisma/dev.db-journal

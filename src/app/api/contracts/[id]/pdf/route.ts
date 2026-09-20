@@ -1,7 +1,14 @@
+import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { generateContractPDF } from '@/lib/contract-pdf-generator';
+
+function tokensMatch(a: string, b: string): boolean {
+  const hashA = crypto.createHash('sha256').update(a).digest();
+  const hashB = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
+}
 
 export async function GET(
   request: NextRequest,
@@ -37,7 +44,7 @@ export async function GET(
   }
 
   // If client access via token, verify token matches
-  if (!user && clientToken && contract.signingToken !== clientToken) {
+  if (!user && clientToken && !tokensMatch(contract.signingToken, clientToken)) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 403 });
   }
 

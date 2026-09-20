@@ -13,6 +13,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "tsx scratch/master_e2e_test.ts"
   },
   "dependencies": {
@@ -41,7 +43,8 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "vitest": "^3.2.4"
   },
   "allowScripts": {
     "prisma@5.22.0": true,

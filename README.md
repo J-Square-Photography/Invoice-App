@@ -50,7 +50,7 @@ Designed from the ground up to operate on **100% free-tier hosting infrastructur
 | **Framework** | Next.js 16 (App Router) | High-performance full-stack React framework with Turbopack |
 | **Language** | TypeScript | Strict type checking and end-to-end type safety |
 | **Styling** | Tailwind CSS v4 | Modern utility-first styling with zero config overhead |
-| **Database ORM** | Prisma 5 | SQLite for local development; PostgreSQL (Supabase/Neon) for production |
+| **Database ORM** | Prisma 5 | PostgreSQL (Supabase/Neon, or local Postgres) for both development and production |
 | **Security & Auth** | `jose` & `bcryptjs` | Cryptographic JWT signing and salted bcrypt password hashing |
 | **QR Code Engine** | `qrcode` + Custom EMVCo | Singapore PayNow SGQR generator with CRC16-CCITT checksum |
 | **PDF Generation** | `pdf-lib` | Serverless native PDF generation with zero external dependencies |
@@ -73,6 +73,9 @@ cd jsquare-crm
 # Install dependencies
 npm install
 
+# Copy the env template and fill in DATABASE_URL, JWT_SECRET, etc.
+cp .env.example .env.local
+
 # Generate Prisma client
 npm run db:generate
 
@@ -88,15 +91,19 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-**Default SuperAdmin Credentials:**
-* **Email:** `admin@jsquarephotography.com`
-* **Password:** `admin123`
+**SuperAdmin login:** the email is `SEED_ADMIN_EMAIL` (default `admin@jsquarephotography.com`). If you didn't set `SEED_ADMIN_PASSWORD`, the seed script generates a random password and prints it once to the console — copy it immediately, it is not shown again, and change it under Team Management after your first login.
 
 ---
 
 ## 🧪 Running Automated Tests
 
-Run the master end-to-end integration test suite verifying all 13 milestones:
+Unit tests (PayNow SGQR/CRC16 encoding, invoice GST math) run via Vitest and don't need a database:
+```bash
+npm test
+```
+
+There is also an ad-hoc end-to-end script (untracked, lives only in your local `scratch/` folder)
+that exercises the full API against a running local dev server:
 ```bash
 npx tsx scratch/master_e2e_test.ts
 ```

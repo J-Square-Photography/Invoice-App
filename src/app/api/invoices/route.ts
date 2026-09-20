@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { defaultPaymentConfig } from '@/lib/payment-config';
+import { calculateInvoiceTotals } from '@/lib/invoice-calculations';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -103,25 +104,14 @@ export async function POST(request: NextRequest) {
     const nextSeq = (count + 1).toString().padStart(4, '0');
     const invoiceNumber = `JSQ-${currentYear}-${nextSeq}`;
 
-    // Calculate item amounts and subtotal
-    let subtotal = 0;
-    const processedItems = items.map((item: { description: string; quantity: number; unitPrice: number }) => {
-      const quantity = Math.max(1, parseInt(item.quantity?.toString() || '1', 10));
-      const unitPrice = Math.max(0, parseFloat(item.unitPrice?.toString() || '0'));
-      const amount = Math.round(quantity * unitPrice * 100) / 100;
-      subtotal += amount;
-      return {
-        description: item.description?.trim() || 'Service Item',
-        quantity,
-        unitPrice,
-        amount,
-      };
-    });
-
-    subtotal = Math.round(subtotal * 100) / 100;
-    const calculatedGstRate = isGstApplied ? gstRate : 0;
-    const gstAmount = isGstApplied ? Math.round(subtotal * (calculatedGstRate / 100) * 100) / 100 : 0;
-    const totalAmount = Math.round((subtotal + gstAmount) * 100) / 100;
+    // Calculate item amounts, subtotal, GST, and total
+    const {
+      items: processedItems,
+      subtotal,
+      gstRate: calculatedGstRate,
+      gstAmount,
+      totalAmount,
+    } = calculateInvoiceTotals(items, { isGstApplied, gstRate });
 
     // Create Invoice with items in a transaction
     const invoice = await prisma.$transaction(async (tx) => {

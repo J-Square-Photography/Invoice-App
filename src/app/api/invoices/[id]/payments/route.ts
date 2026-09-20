@@ -44,6 +44,15 @@ export async function POST(
       );
     }
 
+    if (parsedAmount > invoice.balanceDue + 0.01) {
+      return NextResponse.json(
+        {
+          error: `Payment of $${parsedAmount.toFixed(2)} exceeds the outstanding balance of $${invoice.balanceDue.toFixed(2)}`,
+        },
+        { status: 400 }
+      );
+    }
+
     // Calculate new paid amount and balance due
     const newPaidAmount = Math.round((invoice.paidAmount + parsedAmount) * 100) / 100;
     const newBalanceDue = Math.max(0, Math.round((invoice.totalAmount - newPaidAmount) * 100) / 100);
