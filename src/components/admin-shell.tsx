@@ -67,8 +67,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <img src="/logo-white.png" alt="J Square" className="h-full w-full object-contain" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-neutral-900">J Square</p>
-            <p className="text-xs text-neutral-500">Photography CRM</p>
+            <p className="text-sm font-semibold text-neutral-900">J Square Photography</p>
+            <p className="text-xs text-neutral-500">CRM</p>
           </div>
         </div>
 
