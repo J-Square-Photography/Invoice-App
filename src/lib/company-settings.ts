@@ -31,6 +31,7 @@ export async function getCompanySettings(): Promise<CompanySettingsView> {
     bankAccountNumber: pick(row?.bankAccountNumber, defaultPaymentConfig.bankAccountNumber),
     bankBranchCode: pick(row?.bankBranchCode, defaultPaymentConfig.bankBranchCode),
     bankAccountName: pick(row?.bankAccountName, defaultPaymentConfig.bankAccountName),
+    gstRegNo: pick(row?.gstRegNo, defaultPaymentConfig.gstRegNo),
     isGstRegistered: defaultPaymentConfig.isGstRegistered,
     gstRate: defaultPaymentConfig.gstRate,
     staticQrDataUrl: row?.staticQrDataUrl ?? null,

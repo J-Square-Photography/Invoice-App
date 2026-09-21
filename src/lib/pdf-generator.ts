@@ -125,12 +125,18 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   text(cfg.companyName.toUpperCase(), M, H - 82, 20, fontBold, black);
   text('PHOTOGRAPHY  \u00B7  VIDEOGRAPHY  \u00B7  PHOTOBOOTH', M, H - 96, 7.5, fontRegular, lightGray);
 
-  textRight(`UEN: ${cfg.uen}`, RIGHT, H - 74, 8.5, fontRegular, darkGray);
-  textRight('contact@jsquarephotography.com', RIGHT, H - 86, 8.5, fontRegular, darkGray);
-  textRight('Singapore', RIGHT, H - 98, 8.5, fontRegular, darkGray);
+  // Company block, right-aligned. The GST registration number appears once one is set in Settings.
+  const companyLines = [
+    `UEN: ${cfg.uen}`,
+    ...(cfg.gstRegNo ? [`GST Reg No: ${cfg.gstRegNo}`] : []),
+    'contact@jsquarephotography.com',
+    'Singapore',
+  ];
+  companyLines.forEach((line, i) => textRight(line, RIGHT, H - 74 - i * 12, 8.5, fontRegular, darkGray));
 
   // ============ 2. TITLE ROW ============
-  text('Invoice', M, H - 140, 24, fontBold, black);
+  // A document that charges GST is a Tax Invoice
+  text(data.isGstApplied ? 'Tax Invoice' : 'Invoice', M, H - 140, 24, fontBold, black);
   text(`Issued on ${fmtDate(data.issueDate)}`, M, H - 154, 8.5, fontRegular, darkGray);
 
   textRight(`Invoice #${data.invoiceNumber}`, RIGHT, H - 134, 12, fontBold, black);

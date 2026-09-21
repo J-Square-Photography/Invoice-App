@@ -9,6 +9,7 @@ const live: CompanySettingsView = {
   bankAccountNumber: '999-000111-2',
   bankBranchCode: '501',
   bankAccountName: 'NEW NAME',
+  gstRegNo: 'M90376150R',
   isGstRegistered: true,
   gstRate: 9,
   staticQrDataUrl: 'data:image/png;base64,AAAA',
@@ -48,5 +49,17 @@ describe('payment snapshot', () => {
     expect(parseSnapshot({ companyName: 'x' })).toBeNull();
     expect(parseSnapshot('nope')).toBeNull();
     expect(resolveCompany({ paymentSnapshot: { uen: 5 } }, live).frozen).toBe(false);
+  });
+
+  it('freezes the GST registration number with the invoice', () => {
+    const snapshot = makeSnapshot(live, 'PAYNOW_QR');
+    expect(snapshot.gstRegNo).toBe('M90376150R');
+    const changed: CompanySettingsView = { ...live, gstRegNo: 'M11111111X' };
+    expect(resolveCompany({ paymentSnapshot: snapshot }, changed).gstRegNo).toBe('M90376150R');
+  });
+
+  it('a snapshot saved before the GST number existed falls back to the current one', () => {
+    const { gstRegNo: _omit, ...older } = makeSnapshot(live, 'PAYNOW_QR');
+    expect(resolveCompany({ paymentSnapshot: older }, live).gstRegNo).toBe('M90376150R');
   });
 });

@@ -26,7 +26,8 @@ type TextKey =
   | 'bankName'
   | 'bankAccountNumber'
   | 'bankBranchCode'
-  | 'bankAccountName';
+  | 'bankAccountName'
+  | 'gstRegNo';
 
 type SettingsValues = Record<TextKey, string>;
 
@@ -37,6 +38,8 @@ const FIELDS: Array<{
   /** Completes: "Changing this affects ..." in the unlock warning. */
   effect: string;
   mono?: boolean;
+  /** May be left blank (and cleared) without breaking invoices. */
+  optional?: boolean;
   /** Offer a dropdown of common Asian banks (with a Custom option) instead of plain text. */
   bankPicker?: boolean;
 }> = [
@@ -82,6 +85,15 @@ const FIELDS: Array<{
     label: 'Account Holder Name',
     help: 'The name the bank account is registered under.',
     effect: 'the account holder name shown on new and draft invoices and their PDFs',
+  },
+  {
+    key: 'gstRegNo',
+    label: 'GST Registration No.',
+    help: 'Shown on your invoices. Required on tax invoices when you charge GST. Leave blank if you are not GST-registered.',
+    effect:
+      'the GST registration number shown on new and draft invoices. Invoices that charge GST are titled "Tax Invoice"',
+    mono: true,
+    optional: true,
   },
 ];
 
@@ -245,7 +257,7 @@ function LockedField({
               onChange={(e) => setDraft(e.target.value)}
               disabled={locked || saving}
               className={field.mono ? 'font-mono' : undefined}
-              placeholder={field.bankPicker && !locked ? 'Type a custom bank name' : undefined}
+              placeholder={field.bankPicker && !locked ? 'Type a custom bank name' : field.optional ? 'Not set' : undefined}
               autoComplete="off"
             />
             {field.bankPicker && !locked && (
@@ -266,7 +278,7 @@ function LockedField({
             <Button type="button" variant="outline" onClick={cancel} disabled={saving}>
               Cancel
             </Button>
-            <Button type="button" onClick={save} disabled={saving || unchanged || !draft.trim()}>
+            <Button type="button" onClick={save} disabled={saving || unchanged || (!draft.trim() && !field.optional)}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save &amp; Lock
             </Button>

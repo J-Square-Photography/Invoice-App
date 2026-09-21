@@ -32,6 +32,7 @@ model CompanySettings {
   bankAccountNumber String?
   bankBranchCode    String?
   bankAccountName   String?
+  gstRegNo          String?
   staticQrDataUrl   String?  @db.Text
   updatedBy         String?
   updatedAt         DateTime @updatedAt

@@ -1,7 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
+import { inflateSync } from 'zlib';
 import { generateInvoicePDF, type InvoicePDFData } from '../pdf-generator';
 import { calculateInvoiceTotals } from '../invoice-calculations';
+
+const COMPANY = {
+  companyName: 'J Square Photography',
+  uen: '202012345M',
+  bankName: 'DBS Bank Ltd',
+  bankAccountNumber: '012-345678-9',
+  bankBranchCode: '012',
+  bankAccountName: 'J SQUARE PHOTOGRAPHY',
+  gstRegNo: '',
+  isGstRegistered: true,
+  gstRate: 9,
+};
 
 type RawDiscount = { name: string; type: string; value: number };
 type Options = {
@@ -36,6 +49,27 @@ function invoice({ items = [{ description: 'Event Photography (Novice, 3 hours)'
     items: totals.items,
   };
 }
+/** All text drawn in a generated PDF (the standard fonts store it as hex strings in compressed streams). */
+function pdfText(bytes: Uint8Array): string {
+  const raw = Buffer.from(bytes);
+  const s = raw.toString('latin1');
+  const out: string[] = [];
+  let i = 0;
+  while ((i = s.indexOf('stream', i)) !== -1) {
+    const a = s.indexOf('\n', i) + 1;
+    const b = s.indexOf('endstream', a);
+    if (a < 1 || b < 0) break;
+    try {
+      const content = inflateSync(raw.subarray(a, b)).toString('latin1');
+      for (const m of content.matchAll(/<([0-9A-Fa-f]+)> Tj/g)) out.push(Buffer.from(m[1], 'hex').toString('latin1'));
+    } catch {
+      // not a content stream
+    }
+    i = b + 9;
+  }
+  return out.join('\n');
+}
+
 const pageCount = async (bytes: Uint8Array) => (await PDFDocument.load(bytes)).getPageCount();
 
 describe('invoice PDF layout', () => {
@@ -87,5 +121,23 @@ describe('invoice PDF layout', () => {
       })
     );
     expect(await pageCount(bytes)).toBeLessThanOrEqual(2);
+  });
+
+  it('a GST invoice is titled "Tax Invoice" and shows the GST registration number', async () => {
+    const text = pdfText(await generateInvoicePDF(invoice({ overrides: { company: { ...COMPANY, gstRegNo: 'M90376150R' } } })));
+    expect(text).toContain('Tax Invoice');
+    expect(text).toContain('GST Reg No: M90376150R');
+  });
+
+  it('with no GST number set, the line is simply left out', async () => {
+    const text = pdfText(await generateInvoicePDF(invoice({ overrides: { company: { ...COMPANY, gstRegNo: '' } } })));
+    expect(text).toContain('Tax Invoice');
+    expect(text).not.toContain('GST Reg No');
+  });
+
+  it('an invoice that does not charge GST is a plain Invoice', async () => {
+    const text = pdfText(await generateInvoicePDF(invoice({ overrides: { isGstApplied: false, gstAmount: 0, company: { ...COMPANY, gstRegNo: 'M90376150R' } } })));
+    expect(text).not.toContain('Tax Invoice');
+    expect(text).toContain('Invoice');
   });
 });

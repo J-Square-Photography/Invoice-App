@@ -8,13 +8,20 @@ import { getCompanySettings, toPublicPaymentConfig, SETTINGS_ROW_ID } from '@/li
 const STATIC_QR_PATTERN = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+=*$/;
 const MAX_STATIC_QR_CHARS = 1_400_000; // roughly a 1 MB image once base64-encoded
 
-const TEXT_FIELDS: Record<string, { label: string; max: number; pattern?: RegExp; hint?: string }> = {
+const TEXT_FIELDS: Record<string, { label: string; max: number; pattern?: RegExp; hint?: string; optional?: boolean }> = {
   companyName: { label: 'Company name', max: 100 },
   uen: { label: 'UEN', max: 10, pattern: /^[A-Za-z0-9]{8,10}$/, hint: 'A UEN is 8 to 10 letters and digits, e.g. 201912345A.' },
   bankName: { label: 'Bank name', max: 100 },
   bankAccountNumber: { label: 'Bank account number', max: 40, pattern: /^[0-9][0-9\- ]{3,39}$/, hint: 'Use digits, spaces or dashes only.' },
   bankBranchCode: { label: 'Bank branch code', max: 20 },
   bankAccountName: { label: 'Account name', max: 100 },
+  gstRegNo: {
+    label: 'GST registration number',
+    max: 15,
+    pattern: /^[A-Za-z0-9-]{8,15}$/,
+    hint: 'Use 8 to 15 letters, digits or dashes, e.g. M90376150R.',
+    optional: true,
+  },
 };
 
 export async function GET() {
@@ -51,6 +58,11 @@ export async function PUT(request: NextRequest) {
       if (body[key] === undefined) continue;
       const value = typeof body[key] === 'string' ? body[key].trim() : '';
       if (!value) {
+        // Optional fields can be cleared, which removes them from invoices
+        if (rule.optional) {
+          data[key] = null;
+          continue;
+        }
         return NextResponse.json({ error: `${rule.label} cannot be empty.` }, { status: 400 });
       }
       if (value.length > rule.max || (rule.pattern && !rule.pattern.test(value))) {
