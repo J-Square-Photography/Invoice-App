@@ -13,7 +13,7 @@ const TEXT_FIELDS: Record<string, { label: string; max: number; pattern?: RegExp
   uen: { label: 'UEN', max: 10, pattern: /^[A-Za-z0-9]{8,10}$/, hint: 'A UEN is 8 to 10 letters and digits, e.g. 201912345A.' },
   bankName: { label: 'Bank name', max: 100 },
   bankAccountNumber: { label: 'Bank account number', max: 40, pattern: /^[0-9][0-9\- ]{3,39}$/, hint: 'Use digits, spaces or dashes only.' },
-  bankBranchCode: { label: 'Bank branch code', max: 20 },
+  bankBranchCode: { label: 'Bank branch code', max: 20, optional: true },
   bankAccountName: { label: 'Account name', max: 100 },
   gstRegNo: {
     label: 'GST registration number',

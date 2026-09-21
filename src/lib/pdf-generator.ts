@@ -339,7 +339,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   let py = ly - 38;
   text('1. Bank Transfer', px, py, 8.5, fontBold, black);
   py -= 12;
-  text(fit(`Bank: ${cfg.bankName} (Branch: ${cfg.bankBranchCode})`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, darkGray);
+  text(fit(`Bank: ${cfg.bankName}${cfg.bankBranchCode ? ` (Branch: ${cfg.bankBranchCode})` : ''}`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, darkGray);
   py -= 11;
   text(fit(`A/C No: ${cfg.bankAccountNumber} (${cfg.bankAccountName})`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, darkGray);
   py -= 16;

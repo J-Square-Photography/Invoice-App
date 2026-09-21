@@ -673,10 +673,12 @@ export default function InvoiceDetailPage() {
                   <span className="text-neutral-500">Bank Name:</span>
                   <span className="font-medium text-neutral-900">{paymentConfig.bankName}</span>
                 </div>
+                {paymentConfig.bankBranchCode && (
                 <div className="flex justify-between py-1 border-b border-neutral-100">
                   <span className="text-neutral-500">Branch Code:</span>
                   <span className="font-mono text-neutral-900">{paymentConfig.bankBranchCode}</span>
                 </div>
+                )}
                 <div className="flex justify-between py-1 border-b border-neutral-100 items-center">
                   <span className="text-neutral-500">Account No:</span>
                   <button

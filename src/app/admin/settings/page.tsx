@@ -77,9 +77,10 @@ const FIELDS: Array<{
   {
     key: 'bankBranchCode',
     label: 'Bank Branch Code',
-    help: 'Shown alongside the account number.',
+    help: 'Shown alongside the account number. Leave blank if your bank does not need it.',
     effect: 'the branch code shown on new and draft invoices and their PDFs',
     mono: true,
+    optional: true,
   },
   {
     key: 'bankAccountName',
@@ -209,6 +210,7 @@ function LockedField({
       <div className="flex items-center justify-between gap-3">
         <Label htmlFor={`set-${field.key}`} className="text-sm font-semibold">
           {field.label}
+          <em className="ml-1.5 text-xs font-normal italic text-neutral-500">{field.optional ? '(Optional)' : '(Required)'}</em>
         </Label>
         <button
           type="button"
@@ -354,7 +356,7 @@ function StaticQrField({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <Label className="text-sm font-semibold">Static PayNow QR Image</Label>
+        <Label className="text-sm font-semibold">Static PayNow QR Image <em className="ml-1.5 text-xs font-normal italic text-neutral-500">(Optional)</em></Label>
         <button
           type="button"
           onClick={() => (locked ? setWarnOpen(true) : cancel())}

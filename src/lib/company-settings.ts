@@ -29,7 +29,8 @@ export async function getCompanySettings(): Promise<CompanySettingsView> {
     uen: pick(row?.uen, defaultPaymentConfig.uen),
     bankName: pick(row?.bankName, defaultPaymentConfig.bankName),
     bankAccountNumber: pick(row?.bankAccountNumber, defaultPaymentConfig.bankAccountNumber),
-    bankBranchCode: pick(row?.bankBranchCode, defaultPaymentConfig.bankBranchCode),
+    // Optional: once Settings has been saved, a blank branch code stays blank instead of reverting to the default
+    bankBranchCode: row ? (row.bankBranchCode ?? '').trim() : defaultPaymentConfig.bankBranchCode,
     bankAccountName: pick(row?.bankAccountName, defaultPaymentConfig.bankAccountName),
     gstRegNo: pick(row?.gstRegNo, defaultPaymentConfig.gstRegNo),
     address: pick(row?.address, defaultPaymentConfig.address),
