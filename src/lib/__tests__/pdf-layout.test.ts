@@ -12,6 +12,7 @@ const COMPANY = {
   bankBranchCode: '012',
   bankAccountName: 'J SQUARE PHOTOGRAPHY',
   gstRegNo: '',
+  address: '',
   isGstRegistered: true,
   gstRate: 9,
 };
@@ -133,6 +134,26 @@ describe('invoice PDF layout', () => {
     const text = pdfText(await generateInvoicePDF(invoice({ overrides: { company: { ...COMPANY, gstRegNo: '' } } })));
     expect(text).toContain('Tax Invoice');
     expect(text).not.toContain('GST Reg No');
+  });
+
+  it('shows the business and client addresses when set, and stays on one page', async () => {
+    const bytes = await generateInvoicePDF(
+      invoice({
+        overrides: {
+          company: { ...COMPANY, address: '123 Example Road, #01-23, Singapore 123456' },
+          client: { companyName: 'PA', contactName: 'Maguire Lim', email: 'pa@example.com', address: '9 Client Street, #05-01, Singapore 654321' },
+        },
+      })
+    );
+    const text = pdfText(bytes);
+    expect(text).toContain('123 Example Road');
+    expect(text).toContain('9 Client Street');
+    expect(await pageCount(bytes)).toBe(1);
+  });
+
+  it('with no addresses, the header falls back to plain Singapore', async () => {
+    const text = pdfText(await generateInvoicePDF(invoice({ overrides: { company: { ...COMPANY, address: '' } } })));
+    expect(text).toContain('Singapore');
   });
 
   it('an invoice that does not charge GST is a plain Invoice', async () => {

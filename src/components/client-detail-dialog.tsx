@@ -38,6 +38,7 @@ interface ClientDetail {
   email: string;
   phone: string | null;
   uen: string | null;
+  address: string | null;
   socials: string | null;
   internalNotes: string | null;
   createdAt: string;
@@ -50,6 +51,7 @@ interface ClientForm {
   email: string;
   phone: string;
   uen: string;
+  address: string;
   socials: string;
   internalNotes: string;
 }
@@ -60,6 +62,7 @@ const toForm = (c: ClientDetail): ClientForm => ({
   email: c.email || '',
   phone: c.phone || '',
   uen: c.uen || '',
+  address: c.address || '',
   socials: c.socials || '',
   internalNotes: c.internalNotes || '',
 });
@@ -245,6 +248,10 @@ export function ClientDetailDialog({
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="cd-address">Address (optional, printed on invoices)</Label>
+                  <Input id="cd-address" name="address" maxLength={300} placeholder="e.g. 123 Example Road, #01-23, Singapore 123456" value={form.address} onChange={handleFormChange} />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="cd-notes">Internal Notes</Label>
                   <Textarea id="cd-notes" name="internalNotes" rows={4} value={form.internalNotes} onChange={handleFormChange} placeholder="Add notes about this client..." />
                 </div>
@@ -287,6 +294,10 @@ export function ClientDetailDialog({
                   <div className="space-y-1">
                     <Label>UEN</Label>
                     <div className="font-medium">{client.uen || '-'}</div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Label>Address</Label>
+                    <div className="font-medium">{client.address || '-'}</div>
                   </div>
                   <div className="space-y-1 sm:col-span-2">
                     <Label>Socials / Links</Label>

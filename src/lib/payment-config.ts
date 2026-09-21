@@ -7,6 +7,8 @@ export interface CompanyPaymentConfig {
   bankAccountName: string;
   /** GST registration number, shown on tax invoices. Empty until set in Settings. */
   gstRegNo: string;
+  /** Business address printed on invoices. Empty until set in Settings. */
+  address: string;
   isGstRegistered: boolean;
   gstRate: number;
 }
@@ -19,6 +21,7 @@ export const defaultPaymentConfig: CompanyPaymentConfig = {
   bankBranchCode: process.env.COMPANY_BANK_BRANCH_CODE || '012',
   bankAccountName: process.env.COMPANY_BANK_ACCOUNT_NAME || 'J SQUARE PHOTOGRAPHY',
   gstRegNo: process.env.COMPANY_GST_REG_NO || '',
+  address: process.env.COMPANY_ADDRESS || '',
   isGstRegistered: true,
   gstRate: 9, // Singapore 9% GST
 };

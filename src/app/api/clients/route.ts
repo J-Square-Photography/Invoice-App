@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { companyName, contactName, email, phone, uen, socials, internalNotes } = body;
+    const { companyName, contactName, email, phone, uen, address, socials, internalNotes } = body;
 
     if (!companyName || !contactName || !email) {
       return NextResponse.json(
@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
         email: normalizedEmail,
         phone: phone || null,
         uen: uen || null,
+        address: address ? String(address).trim().slice(0, 300) || null : null,
         socials: socials || null,
         internalNotes: internalNotes || null,
       },

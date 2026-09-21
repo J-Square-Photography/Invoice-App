@@ -27,7 +27,8 @@ type TextKey =
   | 'bankAccountNumber'
   | 'bankBranchCode'
   | 'bankAccountName'
-  | 'gstRegNo';
+  | 'gstRegNo'
+  | 'address';
 
 type SettingsValues = Record<TextKey, string>;
 
@@ -93,6 +94,13 @@ const FIELDS: Array<{
     effect:
       'the GST registration number shown on new and draft invoices. Invoices that charge GST are titled "Tax Invoice"',
     mono: true,
+    optional: true,
+  },
+  {
+    key: 'address',
+    label: 'Business Address',
+    help: 'Printed in the header of your invoices. Leave blank to omit it.',
+    effect: 'the business address shown on new and draft invoices',
     optional: true,
   },
 ];

@@ -48,6 +48,7 @@ export default function ClientsPage() {
     email: '',
     phone: '',
     uen: '',
+    address: '',
     socials: '',
     internalNotes: ''
   });
@@ -122,6 +123,7 @@ export default function ClientsPage() {
         email: '',
         phone: '',
         uen: '',
+        address: '',
         socials: '',
         internalNotes: ''
       });
@@ -262,6 +264,10 @@ export default function ClientsPage() {
               <div className="space-y-2">
                 <Label htmlFor="uen">UEN</Label>
                 <Input id="uen" name="uen" value={formData.uen} onChange={handleInputChange} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Address (optional, printed on invoices)</Label>
+                <Input id="address" name="address" maxLength={300} placeholder="e.g. 123 Example Road, #01-23, Singapore 123456" value={formData.address} onChange={handleInputChange} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="socials">Socials / Links</Label>

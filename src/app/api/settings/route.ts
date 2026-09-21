@@ -22,6 +22,13 @@ const TEXT_FIELDS: Record<string, { label: string; max: number; pattern?: RegExp
     hint: 'Use 8 to 15 letters, digits or dashes, e.g. M90376150R.',
     optional: true,
   },
+  address: {
+    label: 'Business address',
+    max: 200,
+    pattern: /^[^\r\n<>]{5,200}$/,
+    hint: 'Use 5 to 200 characters on a single line, e.g. 123 Example Road, #01-23, Singapore 123456.',
+    optional: true,
+  },
 };
 
 export async function GET() {

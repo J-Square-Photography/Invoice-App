@@ -26,6 +26,7 @@ export interface InvoicePDFData {
     email: string;
     phone?: string | null;
     uen?: string | null;
+    address?: string | null;
   };
   projectTitle: string;
   /** Company/payment details from Settings. Falls back to the environment defaults. */
@@ -130,9 +131,10 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     `UEN: ${cfg.uen}`,
     ...(cfg.gstRegNo ? [`GST Reg No: ${cfg.gstRegNo}`] : []),
     'contact@jsquarephotography.com',
-    'Singapore',
+    // The business address from Settings; plain 'Singapore' until one is set
+    ...(cfg.address ? wrap(cfg.address, 8.5, fontRegular, 210).slice(0, 2) : ['Singapore']),
   ];
-  companyLines.forEach((line, i) => textRight(line, RIGHT, H - 74 - i * 12, 8.5, fontRegular, darkGray));
+  companyLines.forEach((line, i) => textRight(line, RIGHT, H - 72 - i * 11, 8.5, fontRegular, darkGray));
 
   // ============ 2. TITLE ROW ============
   // A document that charges GST is a Tax Invoice
@@ -150,7 +152,9 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   // ============ 3. INFORMATION STRIP ============
   const stripTop = H - 188;
-  const stripH = 76;
+  // The client's address (optional) adds up to two lines under their contact details
+  const clientAddressLines = data.client.address ? wrap(data.client.address, 8.5, fontRegular, 190 - 20).slice(0, 2) : [];
+  const stripH = 76 + clientAddressLines.length * 11;
   const c1 = 190; // column widths: Invoice To | Project | Dates
   const c2 = 195;
   const x2 = M + c1;
@@ -167,6 +171,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   if (data.client.phone) {
     text(fit(`Phone: ${data.client.phone}`, 9, fontRegular, c1 - 20), M + 10, stripTop - 69, 9, fontRegular, darkGray);
   }
+  const addressTop = stripTop - (data.client.phone ? 69 : 57) - 12;
+  clientAddressLines.forEach((l, i) => text(l, M + 10, addressTop - i * 11, 8.5, fontRegular, darkGray));
 
   label('PROJECT / ASSIGNMENT', x2 + 10, stripTop - 15);
   const allProjectLines = wrap(data.projectTitle, 11, fontBold, c2 - 20);

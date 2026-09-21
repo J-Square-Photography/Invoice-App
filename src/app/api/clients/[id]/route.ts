@@ -41,7 +41,7 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { companyName, contactName, email, phone, uen, socials, internalNotes } = body;
+    const { companyName, contactName, email, phone, uen, address, socials, internalNotes } = body;
 
     // If email is changing, check uniqueness
     if (email) {
@@ -63,6 +63,7 @@ export async function PATCH(
     if (email !== undefined) updateData.email = email.toLowerCase().trim();
     if (phone !== undefined) updateData.phone = phone || null;
     if (uen !== undefined) updateData.uen = uen || null;
+    if (address !== undefined) updateData.address = address ? String(address).trim().slice(0, 300) || null : null;
     if (socials !== undefined) updateData.socials = socials || null;
     if (internalNotes !== undefined) updateData.internalNotes = internalNotes || null;
 

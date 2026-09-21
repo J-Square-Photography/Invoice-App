@@ -59,6 +59,7 @@ export async function GET(
         email: invoice.project.client.email,
         phone: invoice.project.client.phone,
         uen: invoice.project.client.uen,
+        address: invoice.project.client.address,
       },
       projectTitle: invoice.project.title,
       items: invoice.items.map((item) => ({

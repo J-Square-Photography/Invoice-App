@@ -10,6 +10,7 @@ const live: CompanySettingsView = {
   bankBranchCode: '501',
   bankAccountName: 'NEW NAME',
   gstRegNo: 'M90376150R',
+  address: '1 Test Road, Singapore 123456',
   isGstRegistered: true,
   gstRate: 9,
   staticQrDataUrl: 'data:image/png;base64,AAAA',
