@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/refresh-button';
 import { AutoRefresh } from '@/components/auto-refresh';
 import { Users, FolderKanban, FileText, DollarSign, ArrowRight, Plus, Building2 } from 'lucide-react';
 import { PROJECT_TYPE_LABELS, INVOICE_STATUS_LABELS } from '@/lib/constants';
@@ -114,7 +115,7 @@ export default async function DashboardPage() {
       <AutoRefresh />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <div className="flex items-center gap-2"><h1 className="text-2xl font-bold tracking-tight">Dashboard</h1><RefreshButton /></div>
           <p className="text-neutral-500">Welcome to J Square Photography CRM</p>
         </div>
         <div className="flex flex-wrap gap-2">

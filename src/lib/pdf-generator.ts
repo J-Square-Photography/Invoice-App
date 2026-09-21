@@ -1,6 +1,7 @@
 import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
-import { defaultPaymentConfig } from './payment-config';
+import { defaultPaymentConfig, type CompanyPaymentConfig } from './payment-config';
 import { generatePayNowPayload, generatePayNowQRDataURL } from './sgqr';
+import { discountName, discountTerms } from './invoice-calculations';
 
 export interface InvoicePDFData {
   invoiceNumber: string;
@@ -9,6 +10,9 @@ export interface InvoicePDFData {
   status: string;
   paymentMethod: string | null;
   subtotal: number;
+  /** Discounts in the order applied (each with the dollars it took off). */
+  discounts?: Array<{ name: string; type: string; value: number; amount: number }>;
+  discountAmount?: number;
   isGstApplied: boolean;
   gstRate: number;
   gstAmount: number;
@@ -24,6 +28,8 @@ export interface InvoicePDFData {
     uen?: string | null;
   };
   projectTitle: string;
+  /** Company/payment details from Settings. Falls back to the environment defaults. */
+  company?: CompanyPaymentConfig & { staticQrDataUrl?: string | null };
   items: Array<{
     description: string;
     quantity: number;
@@ -33,370 +39,350 @@ export interface InvoicePDFData {
 }
 
 export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Array> {
+  const cfg = data.company ?? defaultPaymentConfig;
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage(PageSizes.A4);
-  const { width, height } = page.getSize(); // 595.28 x 841.89 pt
-
-  // Fonts
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fontOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+  type Font = typeof fontRegular;
+  type Colour = ReturnType<typeof rgb>;
 
-  // Colors
+  // --- Look: our burgundy + greys, with bold outer edges and soft inner lines ---
   const black = rgb(0.1, 0.1, 0.1);
   const darkGray = rgb(0.3, 0.3, 0.3);
   const lightGray = rgb(0.55, 0.55, 0.55);
-  const borderGray = rgb(0.85, 0.85, 0.85);
-  const accentRed = rgb(0.48, 0.07, 0.08); // Singapore PayNow Burgundy
+  const STRONG = rgb(0.22, 0.22, 0.22); // bold outer edges
+  const SOFT = rgb(0.86, 0.86, 0.86); // soft but visible dividers
+  const TINT = rgb(0.955, 0.955, 0.955);
+  const accentRed = rgb(0.48, 0.07, 0.08); // Singapore PayNow burgundy
+  const accentTint = rgb(0.985, 0.94, 0.94);
   const accentGold = rgb(0.85, 0.65, 0.13);
+  const green = rgb(0.1, 0.6, 0.2);
+  const white = rgb(1, 1, 1);
 
-  let y = height - 50;
+  const [W, H] = PageSizes.A4; // 595.28 x 841.89 pt
+  const M = 50; // page margin
+  const RIGHT = W - M;
+  const CW = RIGHT - M; // content width
+  const FOOTER_Y = 45;
+  const EDGE = 1.25; // outer edge thickness
+  const RULE = 0.6; // inner divider thickness
 
-  // --- 1. HEADER (Studio Info) ---
-  page.drawText(defaultPaymentConfig.companyName.toUpperCase(), {
-    x: 50,
-    y,
-    size: 20,
-    font: fontBold,
-    color: black,
-  });
-
-  page.drawText('INVOICE', {
-    x: width - 150,
-    y,
-    size: 22,
-    font: fontBold,
-    color: accentRed,
-  });
-
-  y -= 18;
-  page.drawText(`UEN: ${defaultPaymentConfig.uen} • Singapore`, {
-    x: 50,
-    y,
-    size: 9,
-    font: fontRegular,
-    color: darkGray,
-  });
-
-  page.drawText(`# ${data.invoiceNumber}`, {
-    x: width - 150,
-    y,
-    size: 11,
-    font: fontBold,
-    color: black,
-  });
-
-  y -= 14;
-  page.drawText('contact@jsquarephotography.com', {
-    x: 50,
-    y,
-    size: 9,
-    font: fontRegular,
-    color: lightGray,
-  });
-
-  const issueDateStr = new Date(data.issueDate).toLocaleDateString('en-SG', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-  page.drawText(`Date: ${issueDateStr}`, {
-    x: width - 150,
-    y,
-    size: 9,
-    font: fontRegular,
-    color: darkGray,
-  });
-
-  y -= 14;
-  const dueDateStr = new Date(data.dueDate).toLocaleDateString('en-SG', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-  page.drawText(`Due Date: ${dueDateStr}`, {
-    x: width - 150,
-    y,
-    size: 9,
-    font: fontBold,
-    color: data.status === 'PAID' ? darkGray : accentRed,
-  });
-
-  // Top Divider Line
-  y -= 20;
-  page.drawLine({
-    start: { x: 50, y },
-    end: { x: width - 50, y },
-    thickness: 1,
-    color: borderGray,
-  });
-
-  // --- 2. BILL TO & PROJECT ---
-  y -= 25;
-  page.drawText('INVOICE TO:', {
-    x: 50,
-    y,
-    size: 9,
-    font: fontBold,
-    color: lightGray,
-  });
-
-  page.drawText('PROJECT / ASSIGNMENT:', {
-    x: 320,
-    y,
-    size: 9,
-    font: fontBold,
-    color: lightGray,
-  });
-
-  y -= 16;
-  page.drawText(data.client.companyName, {
-    x: 50,
-    y,
-    size: 11,
-    font: fontBold,
-    color: black,
-  });
-
-  page.drawText(data.projectTitle, {
-    x: 320,
-    y,
-    size: 11,
-    font: fontBold,
-    color: black,
-  });
-
-  y -= 14;
-  page.drawText(`Attn: ${data.client.contactName}`, {
-    x: 50,
-    y,
-    size: 9,
-    font: fontRegular,
-    color: darkGray,
-  });
-
-  if (data.client.uen) {
-    page.drawText(`Client UEN: ${data.client.uen}`, {
-      x: 320,
-      y,
-      size: 9,
-      font: fontRegular,
-      color: darkGray,
-    });
-  }
-
-  y -= 14;
-  page.drawText(`Email: ${data.client.email}`, {
-    x: 50,
-    y,
-    size: 9,
-    font: fontRegular,
-    color: darkGray,
-  });
-
-  // Status Badge banner
-  const statusColor = data.status === 'PAID' ? rgb(0.1, 0.6, 0.2) : data.status === 'PARTIAL' ? accentGold : accentRed;
-  page.drawRectangle({
-    x: width - 145,
-    y: y - 2,
-    width: 95,
-    height: 18,
-    color: statusColor,
-  });
-  page.drawText(`STATUS: ${data.status}`, {
-    x: width - 140,
-    y: y + 3,
-    size: 8,
-    font: fontBold,
-    color: rgb(1, 1, 1),
-  });
-
-  // --- 3. ITEMS TABLE ---
-  y -= 35;
-  const tableTop = y;
-  const colX = {
-    desc: 50,
-    qty: 360,
-    unitPrice: 420,
-    amount: 500,
+  let page = pdfDoc.addPage(PageSizes.A4);
+  const pages = [page];
+  const newPage = () => {
+    page = pdfDoc.addPage(PageSizes.A4);
+    pages.push(page);
   };
 
-  // Table Header Background
-  page.drawRectangle({
-    x: 50,
-    y: y - 5,
-    width: width - 100,
-    height: 22,
-    color: rgb(0.96, 0.96, 0.96),
-  });
+  // --- Small drawing helpers ---
+  // The standard PDF fonts can't draw every character (e.g. Chinese names); swap those for "?" instead of failing
+  const safe = (s: string) => s.replace(/[^\x20-\x7E\u00A0-\u00FF\u2022\u2013\u2014\u2018\u2019\u201C\u201D]/g, '?');
+  const measure = (s: string, size: number, font: Font) => font.widthOfTextAtSize(safe(s), size);
+  const fit = (s: string, size: number, font: Font, maxWidth: number) => {
+    let out = safe(s);
+    while (out.length > 1 && font.widthOfTextAtSize(out, size) > maxWidth) out = out.slice(0, -1);
+    return out === safe(s) ? out : `${out.trimEnd()}...`;
+  };
+  const wrap = (s: string, size: number, font: Font, maxWidth: number): string[] => {
+    const words = safe(s).split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let current = '';
+    for (const word of words) {
+      const trial = current ? `${current} ${word}` : word;
+      if (font.widthOfTextAtSize(trial, size) <= maxWidth) {
+        current = trial;
+      } else {
+        if (current) lines.push(current);
+        // a single very long word is cut to fit rather than overflowing
+        current = font.widthOfTextAtSize(word, size) > maxWidth ? fit(word, size, font, maxWidth) : word;
+      }
+    }
+    if (current) lines.push(current);
+    return lines.length ? lines : [''];
+  };
+  const text = (s: string, x: number, y: number, size: number, font: Font, color: Colour) =>
+    page.drawText(safe(s), { x, y, size, font, color });
+  const textRight = (s: string, xRight: number, y: number, size: number, font: Font, color: Colour) =>
+    text(s, xRight - measure(s, size, font), y, size, font, color);
+  const textCentre = (s: string, xCentre: number, y: number, size: number, font: Font, color: Colour) =>
+    text(s, xCentre - measure(s, size, font) / 2, y, size, font, color);
+  const hLine = (x1: number, x2: number, y: number, thickness: number, color: Colour) =>
+    page.drawLine({ start: { x: x1, y }, end: { x: x2, y }, thickness, color });
+  const vLine = (x: number, y1: number, y2: number, thickness: number, color: Colour) =>
+    page.drawLine({ start: { x, y: y1 }, end: { x, y: y2 }, thickness, color });
+  const fillBox = (x: number, yBottom: number, w: number, h: number, color: Colour) =>
+    page.drawRectangle({ x, y: yBottom, width: w, height: h, color });
+  const edgeBox = (x: number, yBottom: number, w: number, h: number, color: Colour = STRONG, thickness = EDGE) =>
+    page.drawRectangle({ x, y: yBottom, width: w, height: h, borderColor: color, borderWidth: thickness });
+  const money = (n: number) => `$${n.toFixed(2)}`;
+  const fmtDate = (d: string | Date) =>
+    new Date(d).toLocaleDateString('en-SG', { year: 'numeric', month: 'short', day: 'numeric' });
 
-  page.drawText('DESCRIPTION', { x: colX.desc + 5, y, size: 9, font: fontBold, color: black });
-  page.drawText('QTY', { x: colX.qty, y, size: 9, font: fontBold, color: black });
-  page.drawText('UNIT (SGD)', { x: colX.unitPrice, y, size: 9, font: fontBold, color: black });
-  page.drawText('TOTAL (SGD)', { x: colX.amount, y, size: 9, font: fontBold, color: black });
+  // ============ 1. TOP BAND + HEADER ============
+  fillBox(M, H - 48, CW, 8, accentRed);
 
-  y -= 10;
+  text(cfg.companyName.toUpperCase(), M, H - 82, 20, fontBold, black);
+  text('PHOTOGRAPHY  \u00B7  VIDEOGRAPHY  \u00B7  PHOTOBOOTH', M, H - 96, 7.5, fontRegular, lightGray);
 
-  // Table Rows
-  for (const item of data.items) {
-    y -= 18;
-    page.drawLine({
-      start: { x: 50, y: y + 14 },
-      end: { x: width - 50, y: y + 14 },
-      thickness: 0.5,
-      color: borderGray,
-    });
+  textRight(`UEN: ${cfg.uen}`, RIGHT, H - 74, 8.5, fontRegular, darkGray);
+  textRight('contact@jsquarephotography.com', RIGHT, H - 86, 8.5, fontRegular, darkGray);
+  textRight('Singapore', RIGHT, H - 98, 8.5, fontRegular, darkGray);
 
-    const desc = item.description.length > 45 ? `${item.description.substring(0, 42)}...` : item.description;
-    page.drawText(desc, { x: colX.desc + 5, y, size: 9, font: fontRegular, color: black });
-    page.drawText(item.quantity.toString(), { x: colX.qty + 5, y, size: 9, font: fontRegular, color: darkGray });
-    page.drawText(`$${item.unitPrice.toFixed(2)}`, { x: colX.unitPrice, y, size: 9, font: fontRegular, color: darkGray });
-    page.drawText(`$${item.amount.toFixed(2)}`, { x: colX.amount, y, size: 9, font: fontBold, color: black });
+  // ============ 2. TITLE ROW ============
+  text('Invoice', M, H - 140, 24, fontBold, black);
+  text(`Issued on ${fmtDate(data.issueDate)}`, M, H - 154, 8.5, fontRegular, darkGray);
+
+  textRight(`Invoice #${data.invoiceNumber}`, RIGHT, H - 134, 12, fontBold, black);
+  const statusColor = data.status === 'PAID' ? green : data.status === 'PARTIAL' ? accentGold : accentRed;
+  const statusLabel = `STATUS: ${data.status}`;
+  const badgeW = measure(statusLabel, 8, fontBold) + 18;
+  fillBox(RIGHT - badgeW, H - 160, badgeW, 16, statusColor);
+  textRight(statusLabel, RIGHT - 9, H - 155, 8, fontBold, white);
+
+  hLine(M, RIGHT, H - 174, RULE, SOFT);
+
+  // ============ 3. INFORMATION STRIP ============
+  const stripTop = H - 188;
+  const stripH = 76;
+  const c1 = 190; // column widths: Invoice To | Project | Dates
+  const c2 = 195;
+  const x2 = M + c1;
+  const x3 = M + c1 + c2;
+  edgeBox(M, stripTop - stripH, CW, stripH);
+  vLine(x2, stripTop, stripTop - stripH, RULE, SOFT);
+  vLine(x3, stripTop, stripTop - stripH, RULE, SOFT);
+
+  const label = (s: string, x: number, y: number) => text(s, x, y, 7.5, fontBold, accentRed);
+  label('INVOICE TO', M + 10, stripTop - 15);
+  text(fit(data.client.companyName, 11, fontBold, c1 - 20), M + 10, stripTop - 31, 11, fontBold, black);
+  text(fit(`Attn: ${data.client.contactName}`, 9, fontRegular, c1 - 20), M + 10, stripTop - 45, 9, fontRegular, darkGray);
+  text(fit(`Email: ${data.client.email}`, 9, fontRegular, c1 - 20), M + 10, stripTop - 57, 9, fontRegular, darkGray);
+  if (data.client.phone) {
+    text(fit(`Phone: ${data.client.phone}`, 9, fontRegular, c1 - 20), M + 10, stripTop - 69, 9, fontRegular, darkGray);
   }
 
-  y -= 15;
-  page.drawLine({
-    start: { x: 50, y },
-    end: { x: width - 50, y },
-    thickness: 1,
-    color: borderGray,
-  });
+  label('PROJECT / ASSIGNMENT', x2 + 10, stripTop - 15);
+  const allProjectLines = wrap(data.projectTitle, 11, fontBold, c2 - 20);
+  const projectLines = allProjectLines.slice(0, 2);
+  if (allProjectLines.length > 2) {
+    // keep the second line honest: show that the title continues
+    projectLines[1] = fit(`${projectLines[1]} ${allProjectLines.slice(2).join(' ')}`, 11, fontBold, c2 - 20);
+  }
+  projectLines.forEach((l, i) => text(l, x2 + 10, stripTop - 31 - i * 13, 11, fontBold, black));
+  if (data.client.uen) {
+    text(fit(`Client UEN: ${data.client.uen}`, 9, fontRegular, c2 - 20), x2 + 10, stripTop - 31 - projectLines.length * 13 - 3, 9, fontRegular, darkGray);
+  }
 
-  // --- 4. TOTALS SECTION ---
-  y -= 20;
-  const totalsX = 380;
-  const valuesX = 500;
+  label('DATES', x3 + 10, stripTop - 15);
+  text('Issued', x3 + 10, stripTop - 30, 7.5, fontRegular, lightGray);
+  text(fmtDate(data.issueDate), x3 + 10, stripTop - 41, 9, fontRegular, black);
+  text('Due', x3 + 10, stripTop - 55, 7.5, fontRegular, lightGray);
+  text(fmtDate(data.dueDate), x3 + 10, stripTop - 66, 9, fontBold, data.status === 'PAID' ? black : accentRed);
 
-  page.drawText('Subtotal:', { x: totalsX, y, size: 9, font: fontRegular, color: darkGray });
-  page.drawText(`$${data.subtotal.toFixed(2)}`, { x: valuesX, y, size: 9, font: fontRegular, color: black });
+  // ============ 4. ITEMS TABLE ============
+  const HEADER_H = 22;
+  const ROW_MIN = 24;
+  const MIN_ROWS = 4; // short invoices are padded with empty rows so the grid always looks complete
+  const qtyX = M + 285;
+  const unitX = qtyX + 50;
+  const amtX = unitX + 80;
+  const descW = qtyX - M - 20;
+  const cellPad = 8;
 
+  let y = stripTop - stripH - 20;
+  let segTop = y;
+
+  const drawTableHeader = () => {
+    fillBox(M, y - HEADER_H, CW, HEADER_H, TINT);
+    text('DESCRIPTION', M + cellPad, y - 15, 8, fontBold, black);
+    textCentre('QTY', (qtyX + unitX) / 2, y - 15, 8, fontBold, black);
+    textRight('UNIT PRICE', amtX - cellPad, y - 15, 8, fontBold, black);
+    textRight('AMOUNT (SGD)', RIGHT - cellPad, y - 15, 8, fontBold, black);
+    y -= HEADER_H;
+  };
+  // Bold outer edge and soft column dividers around the part of the table drawn on this page
+  const closeTableSegment = () => {
+    for (const x of [qtyX, unitX, amtX]) vLine(x, segTop, y, RULE, SOFT);
+    edgeBox(M, y, CW, segTop - y);
+    // the heavier line under the heading row
+    hLine(M, RIGHT, segTop - HEADER_H, EDGE, STRONG);
+  };
+
+  drawTableHeader();
+
+  const rows: Array<(typeof data.items)[number] | null> = [...data.items];
+  while (rows.length < MIN_ROWS) rows.push(null);
+
+  for (const item of rows) {
+    const lines = item ? wrap(item.description, 9, fontRegular, descW) : [];
+    const rowH = Math.max(ROW_MIN, lines.length * 11.5 + 12);
+    if (y - rowH < FOOTER_Y + 60) {
+      closeTableSegment();
+      newPage();
+      y = H - 60;
+      segTop = y;
+      drawTableHeader();
+    }
+    if (item) {
+      lines.forEach((l, i) => text(l, M + cellPad, y - 15 - i * 11.5, 9, fontRegular, black));
+      textCentre(String(item.quantity), (qtyX + unitX) / 2, y - 15, 9, fontRegular, darkGray);
+      textRight(money(item.unitPrice), amtX - cellPad, y - 15, 9, fontRegular, darkGray);
+      textRight(money(item.amount), RIGHT - cellPad, y - 15, 9, fontBold, black);
+    }
+    y -= rowH;
+    hLine(M, RIGHT, y, RULE, SOFT);
+  }
+  closeTableSegment();
+
+  // ============ 5. NOTES + PAYMENT (left) and TOTALS + QR (right) ============
+  const discounts = data.discounts ?? [];
+  type TotalsRow = { label: string; value: string; kind: 'normal' | 'discount' | 'bold' | 'total' | 'paid' | 'balance' };
+  const totalsRows: TotalsRow[] = [{ label: 'Subtotal', value: money(data.subtotal), kind: 'normal' }];
+  for (const d of discounts) {
+    totalsRows.push({ label: `${discountName(d)} (${discountTerms(d)})`, value: `-${money(d.amount)}`, kind: 'discount' });
+  }
+  if (discounts.length > 0) {
+    totalsRows.push({ label: 'Subtotal after discounts', value: money(data.subtotal - (data.discountAmount ?? 0)), kind: 'bold' });
+  }
   if (data.isGstApplied) {
-    y -= 16;
-    page.drawText(`Singapore GST (${data.gstRate}%):`, { x: totalsX, y, size: 9, font: fontRegular, color: darkGray });
-    page.drawText(`$${data.gstAmount.toFixed(2)}`, { x: valuesX, y, size: 9, font: fontRegular, color: black });
+    totalsRows.push({ label: `Singapore GST (${data.gstRate}%)`, value: money(data.gstAmount), kind: 'normal' });
+  }
+  totalsRows.push({ label: 'TOTAL AMOUNT', value: money(data.totalAmount), kind: 'total' });
+  totalsRows.push({ label: 'Paid to Date', value: money(data.paidAmount), kind: 'paid' });
+  totalsRows.push({ label: 'BALANCE DUE (SGD)', value: money(data.balanceDue), kind: 'balance' });
+
+  const rowHeight = (k: TotalsRow['kind']) => (k === 'total' ? 24 : k === 'balance' ? 26 : 19);
+  const totalsH = totalsRows.reduce((sum, r) => sum + rowHeight(r.kind), 0);
+  const TW = 210;
+  const TX = RIGHT - TW;
+  const QR_SIZE = 100;
+  const rightColH = totalsH + 14 + QR_SIZE + 30;
+
+  const LW = TX - 20 - M; // left column width, with a clear gutter before the totals
+  const noteLines = data.notes && data.notes.trim() ? wrap(data.notes.trim(), 8.5, fontRegular, LW - 20).slice(0, 8) : [];
+  const notesH = noteLines.length > 0 ? 26 + noteLines.length * 11 : 0;
+  const PAY_H = 140;
+  const leftColH = notesH + (notesH ? 12 : 0) + PAY_H;
+
+  // Not enough room left on this page for the whole block: it moves to a fresh page together
+  if (y - 18 - Math.max(rightColH, leftColH) < FOOTER_Y + 20) {
+    newPage();
+    y = H - 60;
+  }
+  const zoneTop = y - 18;
+
+  // --- Totals grid ---
+  let ty = zoneTop;
+  for (const r of totalsRows) {
+    const h = rowHeight(r.kind);
+    if (r.kind === 'total') fillBox(TX, ty - h, TW, h, TINT);
+    if (r.kind === 'balance') fillBox(TX, ty - h, TW, h, accentTint);
+    const baseline = ty - h / 2 - 3;
+    if (r.kind === 'total') {
+      text(r.label, TX + 10, baseline, 9.5, fontBold, black);
+      textRight(r.value, RIGHT - 10, baseline, 11, fontBold, black);
+    } else if (r.kind === 'balance') {
+      text(r.label, TX + 10, baseline, 9.5, fontBold, accentRed);
+      textRight(r.value, RIGHT - 10, baseline, 11.5, fontBold, accentRed);
+    } else if (r.kind === 'discount') {
+      const amountW = measure(r.value, 9, fontRegular);
+      text(fit(r.label, 9, fontRegular, TW - 20 - amountW - 8), TX + 10, baseline, 9, fontRegular, darkGray);
+      textRight(r.value, RIGHT - 10, baseline, 9, fontRegular, green);
+    } else if (r.kind === 'paid') {
+      text(r.label, TX + 10, baseline, 9, fontRegular, green);
+      textRight(r.value, RIGHT - 10, baseline, 9, fontBold, green);
+    } else if (r.kind === 'bold') {
+      text(r.label, TX + 10, baseline, 9, fontBold, darkGray);
+      textRight(r.value, RIGHT - 10, baseline, 9, fontBold, black);
+    } else {
+      text(r.label, TX + 10, baseline, 9, fontRegular, darkGray);
+      textRight(r.value, RIGHT - 10, baseline, 9, fontRegular, black);
+    }
+    ty -= h;
+    // soft divider between rows; a stronger one above the total
+    if (r !== totalsRows[totalsRows.length - 1]) {
+      const next = totalsRows[totalsRows.indexOf(r) + 1];
+      hLine(TX, RIGHT, ty, next.kind === 'total' || next.kind === 'balance' ? EDGE : RULE, next.kind === 'total' || next.kind === 'balance' ? STRONG : SOFT);
+    }
+  }
+  edgeBox(TX, zoneTop - totalsH, TW, totalsH);
+
+  // --- Left column: notes, then payment instructions ---
+  let ly = zoneTop;
+  if (noteLines.length > 0) {
+    edgeBox(M, ly - notesH, LW, notesH, SOFT, 1);
+    label('NOTES', M + 10, ly - 15);
+    noteLines.forEach((l, i) => text(l, M + 10, ly - 28 - i * 11, 8.5, fontRegular, darkGray));
+    ly -= notesH + 12;
   }
 
-  y -= 18;
-  page.drawRectangle({
-    x: totalsX - 10,
-    y: y - 5,
-    width: width - totalsX - 40,
-    height: 24,
-    color: rgb(0.96, 0.96, 0.96),
-  });
-  page.drawText('Total Amount:', { x: totalsX, y, size: 10, font: fontBold, color: black });
-  page.drawText(`$${data.totalAmount.toFixed(2)}`, { x: valuesX, y, size: 11, font: fontBold, color: black });
+  edgeBox(M, ly - PAY_H, LW, PAY_H);
+  fillBox(M, ly - 22, LW, 22, TINT);
+  hLine(M, M + LW, ly - 22, RULE, SOFT);
+  edgeBox(M, ly - PAY_H, LW, PAY_H);
+  text('PAYMENT INSTRUCTIONS', M + 12, ly - 15, 9.5, fontBold, accentRed);
+  const px = M + 12;
+  const pw = LW - 24;
+  let py = ly - 38;
+  text('1. Bank Transfer', px, py, 8.5, fontBold, black);
+  py -= 12;
+  text(fit(`Bank: ${cfg.bankName} (Branch: ${cfg.bankBranchCode})`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, darkGray);
+  py -= 11;
+  text(fit(`A/C No: ${cfg.bankAccountNumber} (${cfg.bankAccountName})`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, darkGray);
+  py -= 16;
+  text('2. PayNow (UEN)', px, py, 8.5, fontBold, black);
+  py -= 12;
+  text(fit(`UEN: ${cfg.uen} (${cfg.companyName})`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, darkGray);
+  py -= 16;
+  text('3. Scan with any Singapore bank app', px, py, 8.5, fontBold, black);
+  py -= 12;
+  text('DBS PayLah!, OCBC, UOB, GrabPay', px + 10, py, 8, fontRegular, darkGray);
+  py -= 11;
+  text(`Ref: ${data.invoiceNumber}`, px + 10, py, 8, fontBold, accentRed);
 
-  y -= 18;
-  page.drawText('Paid to Date:', { x: totalsX, y, size: 9, font: fontRegular, color: rgb(0.1, 0.6, 0.2) });
-  page.drawText(`$${data.paidAmount.toFixed(2)}`, { x: valuesX, y, size: 9, font: fontBold, color: rgb(0.1, 0.6, 0.2) });
-
-  y -= 18;
-  page.drawText('Balance Due (SGD):', { x: totalsX, y, size: 10, font: fontBold, color: accentRed });
-  page.drawText(`$${data.balanceDue.toFixed(2)}`, { x: valuesX, y, size: 11, font: fontBold, color: accentRed });
-
-  // --- 5. PAYMENT INSTRUCTIONS (With Dynamic SGQR Image) ---
-  const paymentBoxY = y - 10;
-  const paymentBoxHeight = 150;
-  const paymentBoxWidth = 310;
-
-  page.drawRectangle({
-    x: 50,
-    y: paymentBoxY - paymentBoxHeight + 15,
-    width: paymentBoxWidth,
-    height: paymentBoxHeight,
-    color: rgb(0.98, 0.98, 0.98),
-    borderColor: borderGray,
-    borderWidth: 1,
-  });
-
-  let payY = paymentBoxY;
-  page.drawText('PAYMENT INSTRUCTIONS', {
-    x: 65,
-    y: payY,
-    size: 10,
-    font: fontBold,
-    color: accentRed,
-  });
-
-  payY -= 16;
-  page.drawText('1. Bank Transfer:', { x: 65, y: payY, size: 8.5, font: fontBold, color: black });
-  payY -= 12;
-  page.drawText(`   Bank: ${defaultPaymentConfig.bankName} (Branch: ${defaultPaymentConfig.bankBranchCode})`, { x: 65, y: payY, size: 8, font: fontRegular, color: darkGray });
-  payY -= 12;
-  page.drawText(`   A/C No: ${defaultPaymentConfig.bankAccountNumber} (${defaultPaymentConfig.bankAccountName})`, { x: 65, y: payY, size: 8, font: fontRegular, color: darkGray });
-
-  payY -= 16;
-  page.drawText('2. PayNow (UEN):', { x: 65, y: payY, size: 8.5, font: fontBold, color: black });
-  payY -= 12;
-  page.drawText(`   UEN: ${defaultPaymentConfig.uen} (${defaultPaymentConfig.companyName})`, { x: 65, y: payY, size: 8, font: fontRegular, color: darkGray });
-
-  payY -= 16;
-  page.drawText('3. Scan with Any Singapore Bank App:', { x: 65, y: payY, size: 8.5, font: fontBold, color: black });
-  payY -= 12;
-  page.drawText('   DBS PayLah!, OCBC, UOB, GrabPay', { x: 65, y: payY, size: 8, font: fontRegular, color: darkGray });
-  payY -= 12;
-  page.drawText(`   Ref: ${data.invoiceNumber}`, { x: 65, y: payY, size: 8, font: fontBold, color: accentRed });
-
-  // Generate and embed Dynamic PayNow SGQR Code directly into the PDF
+  // --- PayNow QR, centred under the totals ---
   try {
     const qrAmount = data.balanceDue > 0 ? data.balanceDue : data.totalAmount;
-    const qrDataUrl = await generatePayNowQRDataURL({
-      uen: defaultPaymentConfig.uen,
-      amount: qrAmount,
-      reference: data.invoiceNumber,
-      merchantName: defaultPaymentConfig.companyName,
-      isEditable: false,
-    });
+    // Invoices set to "Static PayNow QR" show the uploaded image instead of a generated code
+    const staticQr = data.paymentMethod === 'PAYNOW_STATIC_QR' ? data.company?.staticQrDataUrl ?? null : null;
+    const qrDataUrl =
+      staticQr ??
+      (await generatePayNowQRDataURL({
+        uen: cfg.uen,
+        amount: qrAmount,
+        reference: data.invoiceNumber,
+        merchantName: cfg.companyName,
+        isEditable: false,
+      }));
 
-    const base64Data = qrDataUrl.replace(/^data:image\/png;base64,/, '');
-    const qrImageBytes = Buffer.from(base64Data, 'base64');
-    const qrImage = await pdfDoc.embedPng(qrImageBytes);
+    const parsed = /^data:image\/(png|jpeg);base64,(.+)$/.exec(qrDataUrl);
+    if (!parsed) throw new Error('Unsupported QR image format');
+    const qrImageBytes = Buffer.from(parsed[2], 'base64');
+    const qrImage = parsed[1] === 'jpeg' ? await pdfDoc.embedJpg(qrImageBytes) : await pdfDoc.embedPng(qrImageBytes);
 
-    const qrSize = 120;
-    const qrX = 370;
-    const qrY = paymentBoxY - paymentBoxHeight + 35;
-
-    page.drawImage(qrImage, {
-      x: qrX,
-      y: qrY,
-      width: qrSize,
-      height: qrSize,
-    });
-
-    page.drawText('PayNow SGQR', {
-      x: qrX + 22,
-      y: qrY - 12,
-      size: 8,
-      font: fontBold,
-      color: accentRed,
-    });
-    page.drawText(`Scan SGD $${qrAmount.toFixed(2)}`, {
-      x: qrX + 16,
-      y: qrY - 22,
-      size: 7.5,
-      font: fontRegular,
-      color: darkGray,
-    });
+    const centreX = TX + TW / 2;
+    const qrTop = zoneTop - totalsH - 14;
+    const qrBottom = qrTop - QR_SIZE;
+    page.drawImage(qrImage, { x: centreX - QR_SIZE / 2, y: qrBottom, width: QR_SIZE, height: QR_SIZE });
+    textCentre(staticQr ? 'PayNow QR' : 'PayNow SGQR', centreX, qrBottom - 12, 8, fontBold, accentRed);
+    textCentre(staticQr ? `Enter SGD $${qrAmount.toFixed(2)}` : `Scan SGD $${qrAmount.toFixed(2)}`, centreX, qrBottom - 22, 7.5, fontRegular, darkGray);
   } catch (err) {
     console.error('Failed to embed SGQR code in PDF:', err);
   }
 
-  // --- 6. FOOTER ---
-  const footerY = 30;
-  page.drawLine({
-    start: { x: 50, y: footerY + 15 },
-    end: { x: width - 50, y: footerY + 15 },
-    thickness: 0.5,
-    color: borderGray,
-  });
-
-  page.drawText('Thank you for partnering with J Square Photography. All rights reserved.', {
-    x: 50,
-    y: footerY,
-    size: 8,
-    font: fontOblique,
-    color: lightGray,
+  // ============ 6. FOOTER (every page) ============
+  pages.forEach((p, i) => {
+    p.drawLine({ start: { x: M, y: FOOTER_Y + 15 }, end: { x: RIGHT, y: FOOTER_Y + 15 }, thickness: RULE, color: SOFT });
+    p.drawText(safe(`Thank you for partnering with ${cfg.companyName}. All rights reserved.`), {
+      x: M,
+      y: FOOTER_Y,
+      size: 8,
+      font: fontOblique,
+      color: lightGray,
+    });
+    const label = `Page ${i + 1} of ${pages.length}`;
+    p.drawText(label, { x: RIGHT - fontRegular.widthOfTextAtSize(label, 8), y: FOOTER_Y, size: 8, font: fontRegular, color: lightGray });
   });
 
   return pdfDoc.save();

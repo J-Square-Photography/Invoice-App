@@ -18,7 +18,7 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
     defaultTitle: 'Photography Services & Licensing Agreement',
     body: `PHOTOGRAPHY SERVICES & CLIENT LICENSING AGREEMENT
 
-This Agreement is entered into between J SQUARE PHOTOGRAPHY (UEN: {{company_uen}}) and {{company_name}} (Attn: {{client_name}}).
+This Agreement is entered into between {{studio_name}} (UEN: {{company_uen}}) and {{company_name}} (Attn: {{client_name}}).
 
 1. PROJECT SCOPE & DELIVERABLES
 Project: {{project_title}}
@@ -47,7 +47,7 @@ This Agreement shall be governed and interpreted according to the laws of the Re
     defaultTitle: 'Commercial Videography Production & License Agreement',
     body: `COMMERCIAL VIDEOGRAPHY PRODUCTION & LICENSE AGREEMENT
 
-This Production Agreement is executed between J SQUARE PHOTOGRAPHY (UEN: {{company_uen}}) and {{company_name}} (Attn: {{client_name}}).
+This Production Agreement is executed between {{studio_name}} (UEN: {{company_uen}}) and {{company_name}} (Attn: {{client_name}}).
 
 1. PRODUCTION SPECIFICATIONS
 Production Title: {{project_title}}
@@ -79,7 +79,7 @@ This contract constitutes the entire understanding between the parties and is su
     defaultTitle: 'Corporate Photography Training Workshop Agreement',
     body: `CORPORATE TRAINING WORKSHOP ENGAGEMENT AGREEMENT
 
-Between: J SQUARE PHOTOGRAPHY (UEN: {{company_uen}})
+Between: {{studio_name}} (UEN: {{company_uen}})
 And: {{company_name}} (Attn: {{client_name}})
 
 1. WORKSHOP PROGRAM
@@ -110,6 +110,7 @@ export function renderContractTemplate(
 
   const defaults: Record<string, string> = {
     company_uen: defaultPaymentConfig.uen,
+    studio_name: defaultPaymentConfig.companyName.toUpperCase(),
     company_name: 'Client',
     client_name: 'Authorized Representative',
     project_title: 'Creative Services',

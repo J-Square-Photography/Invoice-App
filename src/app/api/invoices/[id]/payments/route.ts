@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { getCompanySettings } from '@/lib/company-settings';
+import { makeSnapshot, parseSnapshot, snapshotForDb } from '@/lib/payment-snapshot';
+import { deriveStatus, toCents } from '@/lib/invoice-status';
+
+class PaymentRejected extends Error {
+  constructor(message: string, public status = 400) {
+    super(message);
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -28,52 +37,43 @@ export async function POST(
         { status: 400 }
       );
     }
-
-    const invoice = await prisma.invoice.findUnique({
-      where: { id },
-    });
-
-    if (!invoice) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+    const amountCents = toCents(parsedAmount);
+    if (amountCents <= 0) {
+      return NextResponse.json({ error: 'Payment amount must be at least SGD 0.01' }, { status: 400 });
     }
 
-    if (invoice.status === 'VOID') {
-      return NextResponse.json(
-        { error: 'Cannot record payments on a VOID invoice' },
-        { status: 400 }
-      );
-    }
-
-    if (parsedAmount > invoice.balanceDue + 0.01) {
-      return NextResponse.json(
-        {
-          error: `Payment of $${parsedAmount.toFixed(2)} exceeds the outstanding balance of $${invoice.balanceDue.toFixed(2)}`,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Calculate new paid amount and balance due
-    const newPaidAmount = Math.round((invoice.paidAmount + parsedAmount) * 100) / 100;
-    const newBalanceDue = Math.max(0, Math.round((invoice.totalAmount - newPaidAmount) * 100) / 100);
-
-    // Automated state transition:
-    // If balance is 0 or less -> PAID
-    // Else if some amount has been paid -> PARTIAL
-    // Else keep current
-    let newStatus = invoice.status;
-    if (newBalanceDue <= 0.001) {
-      newStatus = 'PAID';
-    } else if (newPaidAmount > 0) {
-      newStatus = 'PARTIAL';
-    }
+    // Read live settings before the transaction (only used if this is the first payment)
+    const live = await getCompanySettings();
 
     const updatedInvoice = await prisma.$transaction(async (tx) => {
-      // 1. Create payment log
+      // Re-read inside the transaction so two quick payments can't both pass the balance check
+      const invoice = await tx.invoice.findUnique({ where: { id } });
+      if (!invoice) throw new PaymentRejected('Invoice not found', 404);
+      if (invoice.status === 'VOID') throw new PaymentRejected('Cannot record payments on a VOID invoice');
+
+      const totalCents = toCents(invoice.totalAmount);
+      const paidCents = toCents(invoice.paidAmount);
+      const remainingCents = totalCents - paidCents;
+
+      if (remainingCents <= 0) {
+        throw new PaymentRejected('This invoice is already paid in full.', 409);
+      }
+      // Never accept more than what is still owed, not even by a cent
+      if (amountCents > remainingCents) {
+        throw new PaymentRejected(
+          `Payment of $${(amountCents / 100).toFixed(2)} is more than the outstanding balance. The most you can record is $${(remainingCents / 100).toFixed(2)}.`
+        );
+      }
+
+      const newPaid = (paidCents + amountCents) / 100;
+      const newBalance = (totalCents - paidCents - amountCents) / 100;
+      // Paid in full is marked PAID (and locked) automatically; otherwise PARTIAL
+      const newStatus = deriveStatus(invoice.status, newPaid, invoice.totalAmount);
+
       await tx.paymentLog.create({
         data: {
           invoiceId: id,
-          amountPaid: parsedAmount,
+          amountPaid: amountCents / 100,
           paymentDate: new Date(paymentDate),
           paymentMethod,
           transactionRef: transactionRef || null,
@@ -82,13 +82,18 @@ export async function POST(
         },
       });
 
-      // 2. Update invoice balances and status
-      const res = await tx.invoice.update({
+      // The first payment freezes the payment details the client was given
+      const freezeDetails = !parseSnapshot(invoice.paymentSnapshot)
+        ? snapshotForDb(makeSnapshot(live, invoice.paymentMethod))
+        : undefined;
+
+      return tx.invoice.update({
         where: { id },
         data: {
-          paidAmount: newPaidAmount,
-          balanceDue: newBalanceDue,
+          paidAmount: newPaid,
+          balanceDue: newBalance,
           status: newStatus,
+          ...(freezeDetails ? { paymentSnapshot: freezeDetails } : {}),
         },
         include: {
           project: {
@@ -100,15 +105,19 @@ export async function POST(
           },
         },
       });
-
-      return res;
     });
 
     return NextResponse.json({
       invoice: updatedInvoice,
-      message: `Payment of SGD $${parsedAmount.toFixed(2)} recorded successfully.`,
+      message:
+        updatedInvoice.status === 'PAID'
+          ? `Payment of SGD $${parsedAmount.toFixed(2)} recorded. Invoice is now paid in full and locked.`
+          : `Payment of SGD $${parsedAmount.toFixed(2)} recorded successfully.`,
     });
   } catch (error) {
+    if (error instanceof PaymentRejected) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error('Record payment error:', error);
     return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 });
   }

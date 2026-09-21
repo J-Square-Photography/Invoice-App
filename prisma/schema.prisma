@@ -22,6 +22,23 @@ model User {
   @@map("users")
 }
 
+// Single row (id = "default") holding the studio's payment details, editable from
+// Settings. Blank fields fall back to the COMPANY_* environment defaults.
+model CompanySettings {
+  id                String   @id @default("default")
+  companyName       String?
+  uen               String?
+  bankName          String?
+  bankAccountNumber String?
+  bankBranchCode    String?
+  bankAccountName   String?
+  staticQrDataUrl   String?  @db.Text
+  updatedBy         String?
+  updatedAt         DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
 model Client {
   id            String    @id @default(uuid())
   companyName   String
@@ -43,7 +60,10 @@ model Project {
   clientId       String
   client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   title          String
-  projectType    String    @default("PORTRAIT") // PORTRAIT, COMMERCIAL_VIDEO, WORKSHOP, EVENT, OTHER
+  projectType    String    @default("PORTRAIT") // legacy single type; kept in step with the first service tag
+  // Services this project involves (see src/lib/service-tags.ts). Drives which
+  // price presets appear when invoicing the project. Empty on older projects.
+  serviceTags    String[]  @default([])
   pipelineStatus String    @default("INQUIRY")  // INQUIRY, QUOTED, BOOKED, IN_PROGRESS, DELIVERED, CLOSED
   shootDate      DateTime?
   notes          String?
@@ -60,6 +80,11 @@ model Invoice {
   project             Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   invoiceNumber       String              @unique
   subtotal            Decimal             @default(0) @db.Decimal(12, 2)
+  // Sum of all discounts, and the discounts themselves in the order they were applied
+  // (each with its computed amount and the running price before/after). GST is charged
+  // on subtotal minus discountAmount.
+  discountAmount      Decimal             @default(0) @db.Decimal(12, 2)
+  discounts           Json?
   isGstApplied        Boolean             @default(true)
   gstRate             Float               @default(9)
   gstAmount           Decimal             @default(0) @db.Decimal(12, 2)
@@ -69,7 +94,10 @@ model Invoice {
   issueDate           DateTime            @default(now())
   dueDate             DateTime
   status              String              @default("DRAFT") // DRAFT, SENT, PARTIAL, PAID, VOID
-  paymentMethod       String?             // BANK_TRANSFER, PAYNOW_UEN, PAYNOW_QR
+  paymentMethod       String?             // BANK_TRANSFER, PAYNOW_UEN, PAYNOW_QR, PAYNOW_STATIC_QR
+  // Company/bank details as they were when the invoice was issued (see
+  // src/lib/payment-snapshot.ts). Null while DRAFT: drafts follow Settings.
+  paymentSnapshot     Json?
   notes               String?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { defaultPaymentConfig } from '@/lib/payment-config';
 import { calculateInvoiceTotals } from '@/lib/invoice-calculations';
+import type { Prisma } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -20,10 +21,10 @@ export async function GET(request: NextRequest) {
   if (clientId) where.project = { clientId };
   if (q) {
     where.OR = [
-      { invoiceNumber: { contains: q } },
-      { project: { title: { contains: q } } },
-      { project: { client: { companyName: { contains: q } } } },
-      { project: { client: { contactName: { contains: q } } } },
+      { invoiceNumber: { contains: q, mode: 'insensitive' } },
+      { project: { title: { contains: q, mode: 'insensitive' } } },
+      { project: { client: { companyName: { contains: q, mode: 'insensitive' } } } },
+      { project: { client: { contactName: { contains: q, mode: 'insensitive' } } } },
     ];
   }
 
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
       gstRate = defaultPaymentConfig.gstRate,
       notes,
       items = [],
+      discounts = [],
     } = body;
 
     if (!projectId || !dueDate) {
@@ -111,7 +113,9 @@ export async function POST(request: NextRequest) {
       gstRate: calculatedGstRate,
       gstAmount,
       totalAmount,
-    } = calculateInvoiceTotals(items, { isGstApplied, gstRate });
+      discounts: processedDiscounts,
+      discountAmount,
+    } = calculateInvoiceTotals(items, { isGstApplied, gstRate, discounts: Array.isArray(discounts) ? discounts : [] });
 
     // Create Invoice with items in a transaction
     const invoice = await prisma.$transaction(async (tx) => {
@@ -120,6 +124,9 @@ export async function POST(request: NextRequest) {
           projectId,
           invoiceNumber,
           subtotal,
+          discountAmount,
+          discounts:
+            processedDiscounts.length > 0 ? (processedDiscounts as unknown as Prisma.InputJsonValue) : undefined,
           isGstApplied,
           gstRate: calculatedGstRate,
           gstAmount,

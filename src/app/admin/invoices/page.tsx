@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/refresh-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,7 +19,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
+import { InvoiceFormDialog, type EditableInvoice } from '@/components/invoice-form-dialog';
 import {
+  Pencil,
   Search,
   Plus,
   Loader2,
@@ -88,25 +91,9 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
-  // Dialog & Form state
+  // Create / edit invoice pop-up
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [projects, setProjects] = useState<ProjectOption[]>([]);
-  const [loadingProjects, setLoadingProjects] = useState(false);
-
-  const [selectedProjectId, setSelectedProjectId] = useState('');
-  const [dueDate, setDueDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 14);
-    return d.toISOString().split('T')[0];
-  });
-  const [paymentMethod, setPaymentMethod] = useState('PAYNOW_QR');
-  const [isGstApplied, setIsGstApplied] = useState(true);
-  const [gstRate] = useState(9);
-  const [notes, setNotes] = useState('');
-  const [items, setItems] = useState<LineItemInput[]>([
-    { description: 'Photography / Videography Services', quantity: 1, unitPrice: 0 },
-  ]);
+  const [editingInvoice, setEditingInvoice] = useState<EditableInvoice | null>(null);
 
   // Fetch invoices with debounce
   const fetchInvoices = useCallback(async (query: string, status: string) => {
@@ -134,27 +121,13 @@ export default function InvoicesPage() {
     return () => clearTimeout(timer);
   }, [search, statusFilter, fetchInvoices]);
 
-  // Load available projects for invoice creation
-  const loadProjects = async () => {
-    setLoadingProjects(true);
-    try {
-      const res = await fetch('/api/projects');
-      if (res.ok) {
-        const data = await res.json();
-        setProjects(data.projects || []);
-        if (data.projects?.length > 0 && !selectedProjectId) {
-          setSelectedProjectId(data.projects[0].id);
-        }
-      }
-    } catch {
-      toast({ title: 'Error', description: 'Failed to load projects', variant: 'destructive' });
-    } finally {
-      setLoadingProjects(false);
-    }
+  const openCreateDialog = () => {
+    setEditingInvoice(null);
+    setDialogOpen(true);
   };
 
-  const openCreateDialog = () => {
-    loadProjects();
+  const openEditDialog = (inv: InvoiceListItem) => {
+    setEditingInvoice(inv as unknown as EditableInvoice);
     setDialogOpen(true);
   };
 
@@ -174,109 +147,6 @@ export default function InvoicesPage() {
     }
   };
 
-  // Line item handlers
-  const addItem = () => {
-    setItems((prev) => [...prev, { description: '', quantity: 1, unitPrice: 0 }]);
-  };
-
-  const removeItem = (index: number) => {
-    if (items.length <= 1) return;
-    setItems((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const updateItem = (index: number, field: keyof LineItemInput, value: string | number) => {
-    setItems((prev) => {
-      const updated = [...prev];
-      if (field === 'quantity') {
-        updated[index].quantity = Math.max(1, parseInt(value.toString() || '1', 10));
-      } else if (field === 'unitPrice') {
-        updated[index].unitPrice = Math.max(0, parseFloat(value.toString() || '0'));
-      } else {
-        updated[index].description = value.toString();
-      }
-      return updated;
-    });
-  };
-
-  // Quick apply photobooth preset
-  const applyPreset = (preset: PhotoboothPackage, replaceIndex?: number) => {
-    if (typeof replaceIndex === 'number' && replaceIndex >= 0 && replaceIndex < items.length) {
-      setItems((prev) => {
-        const updated = [...prev];
-        updated[replaceIndex] = {
-          description: preset.description,
-          quantity: 1,
-          unitPrice: preset.price,
-        };
-        return updated;
-      });
-      toast({ title: 'Preset Applied', description: `${preset.name} set ($${preset.price.toFixed(2)}).` });
-      return;
-    }
-
-    // Smart insertion: if only 1 default empty item exists, replace it
-    if (
-      items.length === 1 &&
-      (!items[0].description || items[0].description === 'Photography / Videography Services') &&
-      items[0].unitPrice === 0
-    ) {
-      setItems([{ description: preset.description, quantity: 1, unitPrice: preset.price }]);
-    } else {
-      setItems((prev) => [...prev, { description: preset.description, quantity: 1, unitPrice: preset.price }]);
-    }
-    toast({ title: 'Preset Added', description: `${preset.name} added ($${preset.price.toFixed(2)}).` });
-  };
-
-  // Calculations for preview
-  const calculatedSubtotal = items.reduce(
-    (sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0),
-    0
-  );
-  const calculatedGst = isGstApplied ? Math.round(calculatedSubtotal * (gstRate / 100) * 100) / 100 : 0;
-  const calculatedTotal = Math.round((calculatedSubtotal + calculatedGst) * 100) / 100;
-
-  // Handle invoice submit
-  const handleCreateInvoice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProjectId) {
-      toast({ title: 'Validation Error', description: 'Please select a project', variant: 'destructive' });
-      return;
-    }
-
-    setCreating(true);
-    try {
-      const res = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: selectedProjectId,
-          dueDate,
-          paymentMethod,
-          isGstApplied,
-          gstRate,
-          notes,
-          items,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        toast({ title: 'Error', description: data.error || 'Failed to create invoice', variant: 'destructive' });
-        return;
-      }
-
-      toast({ title: 'Success', description: `Invoice ${data.invoice.invoiceNumber} created!` });
-      setDialogOpen(false);
-      // Reset form
-      setNotes('');
-      setItems([{ description: 'Photography / Videography Services', quantity: 1, unitPrice: 0 }]);
-      fetchInvoices(search, statusFilter);
-    } catch {
-      toast({ title: 'Error', description: 'Network error occurred', variant: 'destructive' });
-    } finally {
-      setCreating(false);
-    }
-  };
 
   // Metrics
   const totalInvoiced = invoices.reduce((sum, inv) => sum + (inv.status !== 'VOID' ? inv.totalAmount : 0), 0);
@@ -306,7 +176,7 @@ export default function InvoicesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Invoices & Financials</h1>
+          <div className="flex items-center gap-2"><h1 className="text-2xl font-bold tracking-tight">Invoices & Financials</h1><RefreshButton onRefresh={() => fetchInvoices(search, statusFilter)} /></div>
           <p className="text-neutral-500">Track invoices, milestone partial payments, and PayNow SGQR codes</p>
         </div>
         <Button onClick={openCreateDialog}>
@@ -329,23 +199,23 @@ export default function InvoicesPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-neutral-500">Collected Revenue</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">SGD ${totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            <p className="text-xs text-neutral-500">Payments recorded to date</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-neutral-500">Outstanding Balance</CardTitle>
             <Clock className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-600">SGD ${totalOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             <p className="text-xs text-neutral-500">Pending client clearance</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-neutral-500">Collected Revenue</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-600">SGD ${totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <p className="text-xs text-neutral-500">Payments recorded to date</p>
           </CardContent>
         </Card>
 
@@ -454,6 +324,16 @@ export default function InvoicesPage() {
                               View
                             </Button>
                           </Link>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs px-2"
+                            title={inv.status === 'PAID' ? 'Paid invoices are locked. Open the invoice to revert the payment.' : 'Edit Invoice'}
+                            disabled={inv.status === 'PAID'}
+                            onClick={() => openEditDialog(inv)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
                           <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener noreferrer">
                             <Button variant="ghost" size="sm" className="h-8 text-xs px-2" title="Download PDF">
                               <Download className="h-3.5 w-3.5" />
@@ -463,7 +343,8 @@ export default function InvoicesPage() {
                             variant="ghost"
                             size="sm"
                             className="h-8 text-xs px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            title="Delete Invoice"
+                            title={inv.status === 'PAID' ? 'Paid invoices are locked. Open the invoice to revert the payment.' : 'Delete Invoice'}
+                            disabled={inv.status === 'PAID'}
                             onClick={() => handleDeleteInvoice(inv.id, inv.invoiceNumber)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -479,269 +360,12 @@ export default function InvoicesPage() {
         </CardContent>
       </Card>
 
-      {/* Create Invoice Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create New Invoice</DialogTitle>
-            <DialogDescription>
-              Draft an invoice with Singapore EMVCo PayNow SGQR code and 9% GST.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleCreateInvoice} className="space-y-4 py-2">
-            {/* Project Selector */}
-            <div className="space-y-2">
-              <Label htmlFor="projectId">Project / Client *</Label>
-              {loadingProjects ? (
-                <div className="flex items-center text-sm text-neutral-500 py-2">
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading projects...
-                </div>
-              ) : projects.length === 0 ? (
-                <p className="text-sm text-amber-600">
-                  No projects available. Please create a project first before generating an invoice.
-                </p>
-              ) : (
-                <Select
-                  id="projectId"
-                  value={selectedProjectId}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
-                  required
-                >
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.client.companyName} — {p.title}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </div>
-
-            {/* Dates & Payment Method */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="dueDate">Payment Due Date *</Label>
-                <Input
-                  id="dueDate"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="paymentMethod">Primary Payment Method</Label>
-                <Select
-                  id="paymentMethod"
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                >
-                  <option value="PAYNOW_QR">Dynamic PayNow SGQR (Recommended)</option>
-                  <option value="PAYNOW_UEN">PayNow via UEN Text</option>
-                  <option value="BANK_TRANSFER">Bank Wire Transfer</option>
-                </Select>
-              </div>
-            </div>
-
-            {/* Photobooth Quick Presets Panel */}
-            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-2.5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-950">
-                  <Sparkles className="h-3.5 w-3.5 text-amber-600" />
-                  <span>Photobooth Quick Presets</span>
-                </div>
-                <span className="text-[11px] text-amber-700">
-                  Select to autofill package description & rate
-                </span>
-              </div>
-
-              {/* Quick 1-Tap Popular Buttons */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] font-medium text-amber-900 mr-0.5">Popular:</span>
-                {PHOTOBOOTH_PACKAGES.filter((p) =>
-                  ['pb-2h-a', 'pb-3h-a', 'pb-4h-a', 'pb-addon-extra-hour'].includes(p.id)
-                ).map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => applyPreset(preset)}
-                    className="inline-flex items-center gap-1 rounded bg-white px-2 py-1 text-xs font-medium text-neutral-800 border border-amber-300 hover:bg-amber-100 hover:border-amber-400 transition-colors shadow-2xs cursor-pointer"
-                  >
-                    <Plus className="h-3 w-3 text-amber-600" />
-                    {preset.shortLabel}
-                  </button>
-                ))}
-              </div>
-
-              {/* All Packages Dropdown */}
-              <select
-                aria-label="Select Photobooth Package"
-                value=""
-                onChange={(e) => {
-                  const preset = getPresetById(e.target.value);
-                  if (preset) applyPreset(preset);
-                }}
-                className="flex h-8 w-full rounded-md border border-amber-300 bg-white px-2.5 text-xs text-neutral-800 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
-              >
-                <option value="">⚡ Browse all Photobooth packages & add-ons ({PHOTOBOOTH_PACKAGES.length} presets)...</option>
-                {PHOTOBOOTH_CATEGORIES.map((cat) => (
-                  <optgroup key={cat} label={`── ${cat} ──`}>
-                    {PHOTOBOOTH_PACKAGES.filter((p) => p.category === cat).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} — SGD ${p.price.toFixed(2)}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-
-            {/* Line Items Builder */}
-            <div className="space-y-3 pt-2">
-              <div className="flex justify-between items-center">
-                <div>
-                  <Label className="text-sm font-semibold">Invoice Line Items</Label>
-                  <p className="text-[11px] text-neutral-500">Add or edit items below</p>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={addItem} className="h-7 text-xs">
-                  <Plus className="mr-1 h-3 w-3" /> Add Blank Item
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                {items.map((item, idx) => (
-                  <div key={idx} className="bg-neutral-50 p-2.5 rounded-md border border-neutral-200 space-y-1.5">
-                    <div className="flex gap-2 items-start">
-                      <div className="flex-1 space-y-1">
-                        <Input
-                          placeholder="Service description (e.g. Commercial Shoot)"
-                          value={item.description}
-                          onChange={(e) => updateItem(idx, 'description', e.target.value)}
-                          required
-                          className="h-8 text-xs bg-white"
-                        />
-                      </div>
-                      <div className="w-20 space-y-1">
-                        <Input
-                          type="number"
-                          min="1"
-                          placeholder="Qty"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
-                          required
-                          className="h-8 text-xs bg-white text-center"
-                        />
-                      </div>
-                      <div className="w-28 space-y-1">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="Unit Price"
-                          value={item.unitPrice || ''}
-                          onChange={(e) => updateItem(idx, 'unitPrice', e.target.value)}
-                          required
-                          className="h-8 text-xs bg-white text-right"
-                        />
-                      </div>
-                      <div className="w-24 text-right self-center text-xs font-semibold text-neutral-700">
-                        ${((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}
-                      </div>
-                      {items.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeItem(idx)}
-                          className="h-8 w-8 p-0 text-neutral-400 hover:text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Per-row preset swap */}
-                    <div className="flex items-center justify-between px-0.5">
-                      <select
-                        aria-label="Preset for this line item"
-                        value=""
-                        onChange={(e) => {
-                          const preset = getPresetById(e.target.value);
-                          if (preset) applyPreset(preset, idx);
-                        }}
-                        className="text-[11px] text-neutral-500 hover:text-neutral-800 bg-transparent border-0 p-0 cursor-pointer focus:ring-0"
-                      >
-                        <option value="">⚡ Swap this item with Photobooth preset...</option>
-                        {PHOTOBOOTH_PACKAGES.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} (${p.price.toFixed(2)})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* GST Toggle & Totals Preview */}
-            <div className="bg-neutral-100 p-4 rounded-lg space-y-2 text-sm">
-              <div className="flex justify-between items-center pb-2 border-b border-neutral-200">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-neutral-700">
-                  <input
-                    type="checkbox"
-                    checked={isGstApplied}
-                    onChange={(e) => setIsGstApplied(e.target.checked)}
-                    className="rounded text-neutral-900"
-                  />
-                  Apply Singapore Goods & Services Tax (9% GST)
-                </label>
-                <span className="text-xs text-neutral-500">Sole Proprietor Registered</span>
-              </div>
-
-              <div className="flex justify-between text-xs text-neutral-600">
-                <span>Subtotal:</span>
-                <span>SGD ${calculatedSubtotal.toFixed(2)}</span>
-              </div>
-
-              {isGstApplied && (
-                <div className="flex justify-between text-xs text-neutral-600">
-                  <span>GST (9%):</span>
-                  <span>SGD ${calculatedGst.toFixed(2)}</span>
-                </div>
-              )}
-
-              <div className="flex justify-between text-sm font-bold text-neutral-900 pt-1 border-t border-neutral-200">
-                <span>Grand Total:</span>
-                <span>SGD ${calculatedTotal.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes / Payment Terms (Optional)</Label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. 50% deposit required on booking. Balance upon delivery."
-                className="h-20"
-              />
-            </div>
-
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={creating}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={creating || projects.length === 0}>
-                {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Generate Invoice
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <InvoiceFormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        invoice={editingInvoice}
+        onSaved={() => fetchInvoices(search, statusFilter)}
+      />
     </div>
   );
 }

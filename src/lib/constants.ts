@@ -41,6 +41,7 @@ export const PAYMENT_METHODS = {
   BANK_TRANSFER: 'BANK_TRANSFER',
   PAYNOW_UEN: 'PAYNOW_UEN',
   PAYNOW_QR: 'PAYNOW_QR',
+  PAYNOW_STATIC_QR: 'PAYNOW_STATIC_QR',
 } as const;
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[keyof typeof PAYMENT_METHODS];
@@ -76,4 +77,5 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   BANK_TRANSFER: 'Bank Transfer',
   PAYNOW_UEN: 'PayNow (UEN)',
   PAYNOW_QR: 'PayNow (QR Code)',
+  PAYNOW_STATIC_QR: 'PayNow (Static QR)',
 };

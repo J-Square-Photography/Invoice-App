@@ -93,7 +93,9 @@ async function handleSweeper(request: NextRequest) {
     };
 
     // 4. Dispatch internal notifications across channels
-    const dispatchResults = await dispatchOverdueNotifications(report, config);
+    // ?notify=false returns the overdue report only (used when the Alerts page loads or refreshes)
+    const shouldNotify = new URL(request.url).searchParams.get('notify') !== 'false';
+    const dispatchResults = shouldNotify ? await dispatchOverdueNotifications(report, config) : {};
 
     return NextResponse.json({
       success: true,

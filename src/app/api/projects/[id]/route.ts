@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { cleanTags, legacyTypeForTags } from '@/lib/service-tags';
 
 export async function GET(
   request: NextRequest,
@@ -44,6 +45,11 @@ export async function PATCH(
     const updateData: Record<string, unknown> = {};
     if (title !== undefined) updateData.title = title;
     if (projectType !== undefined) updateData.projectType = projectType;
+    if (body.serviceTags !== undefined) {
+      const serviceTags = cleanTags(body.serviceTags);
+      updateData.serviceTags = serviceTags;
+      if (serviceTags.length > 0) updateData.projectType = legacyTypeForTags(serviceTags);
+    }
     if (pipelineStatus !== undefined) updateData.pipelineStatus = pipelineStatus;
     if (shootDate !== undefined) updateData.shootDate = shootDate ? new Date(shootDate) : null;
     if (notes !== undefined) updateData.notes = notes || null;

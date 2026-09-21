@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { generateInvoicePDF } from '@/lib/pdf-generator';
+import { getCompanySettings } from '@/lib/company-settings';
+import { resolveCompany } from '@/lib/payment-snapshot';
 
 export async function GET(
   request: NextRequest,
@@ -31,13 +33,19 @@ export async function GET(
   }
 
   try {
+    const company = resolveCompany(invoice, await getCompanySettings());
     const pdfBytes = await generateInvoicePDF({
+      company,
       invoiceNumber: invoice.invoiceNumber,
       issueDate: invoice.issueDate,
       dueDate: invoice.dueDate,
       status: invoice.status,
       paymentMethod: invoice.paymentMethod,
       subtotal: invoice.subtotal,
+      discounts: Array.isArray(invoice.discounts)
+        ? (invoice.discounts as unknown as Array<{ name: string; type: string; value: number; amount: number }>)
+        : [],
+      discountAmount: invoice.discountAmount,
       isGstApplied: invoice.isGstApplied,
       gstRate: invoice.gstRate,
       gstAmount: invoice.gstAmount,

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCompanySettings } from '@/lib/company-settings';
+import { makeSnapshot, parseSnapshot, resolveCompany, snapshotForDb } from '@/lib/payment-snapshot';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { generateSigningToken } from '@/lib/audit-crypto';
@@ -17,10 +19,10 @@ export async function GET(request: NextRequest) {
   if (signed === 'false') where.isSigned = false;
   if (q) {
     where.OR = [
-      { title: { contains: q } },
-      { invoice: { invoiceNumber: { contains: q } } },
-      { invoice: { project: { title: { contains: q } } } },
-      { invoice: { project: { client: { companyName: { contains: q } } } } },
+      { title: { contains: q, mode: 'insensitive' } },
+      { invoice: { invoiceNumber: { contains: q, mode: 'insensitive' } } },
+      { invoice: { project: { title: { contains: q, mode: 'insensitive' } } } },
+      { invoice: { project: { client: { companyName: { contains: q, mode: 'insensitive' } } } } },
     ];
   }
 
@@ -102,7 +104,10 @@ export async function POST(request: NextRequest) {
       const depositAmount = (invoice.totalAmount * 0.5).toFixed(2);
       const balanceDue = (invoice.totalAmount - parseFloat(depositAmount)).toFixed(2);
 
+      const company = resolveCompany(invoice, await getCompanySettings());
       finalBody = renderContractTemplate(tmpl.body, {
+        company_uen: company.uen,
+        studio_name: company.companyName.toUpperCase(),
         company_name: invoice.project.client.companyName,
         client_name: invoice.project.client.contactName,
         project_title: invoice.project.title,
@@ -118,6 +123,14 @@ export async function POST(request: NextRequest) {
 
     if (!finalBody) {
       return NextResponse.json({ error: 'Contract body cannot be empty' }, { status: 400 });
+    }
+
+    // Creating a contract freezes the invoice's payment details (if not already frozen)
+    if (!parseSnapshot(invoice.paymentSnapshot)) {
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { paymentSnapshot: snapshotForDb(makeSnapshot(await getCompanySettings(), invoice.paymentMethod)) },
+      });
     }
 
     const signingToken = generateSigningToken();

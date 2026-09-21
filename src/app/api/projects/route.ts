@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { cleanTags, legacyTypeForTags } from '@/lib/service-tags';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -9,18 +10,20 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
   const type = searchParams.get('type');
+  const tag = searchParams.get('tag');
   const clientId = searchParams.get('clientId');
   const q = searchParams.get('q');
 
   const where: Record<string, unknown> = {};
   if (status) where.pipelineStatus = status;
   if (type) where.projectType = type;
+  if (tag) where.serviceTags = { has: tag };
   if (clientId) where.clientId = clientId;
   if (q) {
     where.OR = [
-      { title: { contains: q } },
-      { client: { companyName: { contains: q } } },
-      { client: { contactName: { contains: q } } },
+      { title: { contains: q, mode: 'insensitive' } },
+      { client: { companyName: { contains: q, mode: 'insensitive' } } },
+      { client: { contactName: { contains: q, mode: 'insensitive' } } },
     ];
   }
 
@@ -45,6 +48,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { clientId, title, projectType, pipelineStatus, shootDate, notes } = body;
+    const serviceTags = cleanTags(body.serviceTags);
 
     if (!clientId || !title) {
       return NextResponse.json(
@@ -63,7 +67,9 @@ export async function POST(request: NextRequest) {
       data: {
         clientId,
         title,
-        projectType: projectType || 'PORTRAIT',
+        serviceTags,
+        // Legacy single type follows the first tag when tags are given
+        projectType: serviceTags.length > 0 ? legacyTypeForTags(serviceTags) : projectType || 'OTHER',
         pipelineStatus: pipelineStatus || 'INQUIRY',
         shootDate: shootDate ? new Date(shootDate) : null,
         notes: notes || null,

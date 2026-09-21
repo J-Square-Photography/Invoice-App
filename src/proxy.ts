@@ -33,8 +33,11 @@ export async function proxy(request: NextRequest) {
         throw new Error('Invalid token payload');
       }
 
-      // SuperAdmin-only routes
-      if (pathname.startsWith('/admin/team') && payload.role !== 'SUPER_ADMIN') {
+      // Developer (SUPER_ADMIN)-only routes
+      if (
+        (pathname.startsWith('/admin/team') || pathname.startsWith('/admin/settings')) &&
+        payload.role !== 'SUPER_ADMIN'
+      ) {
         return NextResponse.redirect(new URL('/admin', request.url));
       }
 

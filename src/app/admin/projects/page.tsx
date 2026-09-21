@@ -3,7 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Search, Plus, Eye } from 'lucide-react';
+import { ProjectDetailDialog } from '@/components/project-detail-dialog';
+import { rankProjects } from '@/lib/search-rank';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/refresh-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -11,13 +14,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
-import { PROJECT_TYPES, PROJECT_TYPE_LABELS, PIPELINE_STATUSES, PIPELINE_STATUS_LABELS } from '@/lib/constants';
+import { PIPELINE_STATUS_LABELS } from '@/lib/constants';
+import { SERVICE_TAGS } from '@/lib/service-tags';
+import { ServiceTagPicker, ServiceTagBadges } from '@/components/service-tag-picker';
 
 type Project = {
   id: string;
   title: string;
   clientId: string;
   projectType: string;
+  serviceTags?: string[];
   pipelineStatus: string;
   shootDate: string | null;
   client: { companyName: string };
@@ -34,7 +40,7 @@ export default function ProjectsListPage() {
   // Dialog & Form State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [title, setTitle] = useState('');
-  const [projectType, setProjectType] = useState('PORTRAIT');
+  const [serviceTags, setServiceTags] = useState<string[]>([]);
   const [shootDate, setShootDate] = useState('');
   const [notes, setNotes] = useState('');
   
@@ -43,6 +49,8 @@ export default function ProjectsListPage() {
   const [clientResults, setClientResults] = useState<{id: string; companyName: string; contactName: string; email: string}[]>([]);
   const [selectedClient, setSelectedClient] = useState<{id: string; companyName: string} | null>(null);
   const [showClientDropdown, setShowClientDropdown] = useState(false);
+  // Existing projects with a similar title, shown under the title field to avoid duplicates
+  const [similarProjects, setSimilarProjects] = useState<Project[]>([]);
 
   const { toast } = useToast();
 
@@ -52,7 +60,7 @@ export default function ProjectsListPage() {
       const query = new URLSearchParams();
       if (searchQuery) query.append('q', searchQuery);
       if (statusFilter !== 'ALL') query.append('status', statusFilter);
-      if (typeFilter !== 'ALL') query.append('type', typeFilter);
+      if (typeFilter !== 'ALL') query.append('tag', typeFilter);
 
       const res = await fetch(`/api/projects?${query.toString()}`);
       if (res.ok) {
@@ -75,31 +83,75 @@ export default function ProjectsListPage() {
     return () => clearTimeout(timer);
   }, [searchQuery, statusFilter, typeFilter]);
 
-  // Search clients with debounce
+  // Search clients as you type: from the first letter, any case, best matches first
   useEffect(() => {
-    if (!clientSearch || clientSearch.length < 2) {
-      setClientResults([]);
-      return;
-    }
+    let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/clients?q=${encodeURIComponent(clientSearch)}&limit=5`);
-        if (res.ok) {
+        const res = await fetch(`/api/clients?q=${encodeURIComponent(clientSearch.trim())}&limit=8`);
+        if (res.ok && !cancelled) {
           const data = await res.json();
           setClientResults(data.clients || []);
-          setShowClientDropdown(true);
         }
       } catch (err) {
         console.error("Failed to fetch clients", err);
       }
-    }, 300);
-    return () => clearTimeout(timer);
+    }, 100);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [clientSearch]);
+  // Suggest existing projects with a similar title while typing one
+  useEffect(() => {
+    const q = title.trim();
+    if (!isDialogOpen || !q) {
+      setSimilarProjects([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/projects?q=${encodeURIComponent(q)}`);
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setSimilarProjects(rankProjects<Project>(data.projects || [], q).slice(0, 5));
+        }
+      } catch {
+        // suggestions are optional
+      }
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [title, isDialogOpen]);
+
+  // Project detail pop-up. `?view=<id>` deep-links (dashboard, client pop-up) open it on load.
+  const [viewId, setViewId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('view');
+    if (id) setViewId(id);
+  }, []);
+
+  const openProject = (id: string) => setViewId(id);
+
+  const closeProject = () => {
+    setViewId(null);
+    if (window.location.search.includes('view=')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  };
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClient) {
       toast({ title: 'Error', description: 'Please select a client', variant: 'destructive' });
+      return;
+    }
+    if (serviceTags.length === 0) {
+      toast({ title: 'Choose a service', description: 'Tag the project with at least one service (or Other).', variant: 'destructive' });
       return;
     }
 
@@ -110,7 +162,7 @@ export default function ProjectsListPage() {
         body: JSON.stringify({
           title,
           clientId: selectedClient.id,
-          projectType,
+          serviceTags,
           shootDate: shootDate ? new Date(shootDate).toISOString() : null,
           notes
         }),
@@ -121,7 +173,7 @@ export default function ProjectsListPage() {
         setIsDialogOpen(false);
         // Reset form
         setTitle('');
-        setProjectType('PORTRAIT');
+        setServiceTags([]);
         setShootDate('');
         setNotes('');
         setSelectedClient(null);
@@ -151,7 +203,7 @@ export default function ProjectsListPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
+        <div className="flex items-center gap-2"><h1 className="text-3xl font-bold tracking-tight">Projects</h1><RefreshButton onRefresh={fetchProjects} /></div>
         <Button onClick={() => setIsDialogOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
           New Project
@@ -185,9 +237,9 @@ export default function ProjectsListPage() {
           onChange={(e) => setTypeFilter(e.target.value)}
           className="flex h-10 w-full sm:w-48 items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
         >
-          <option value="ALL">All Types</option>
-          {Object.entries(PROJECT_TYPE_LABELS || {}).map(([key, label]) => (
-            <option key={key} value={key}>{label as string}</option>
+          <option value="ALL">All Services</option>
+          {SERVICE_TAGS.map((tag) => (
+            <option key={tag.id} value={tag.id}>{tag.label}</option>
           ))}
         </select>
       </div>
@@ -199,7 +251,7 @@ export default function ProjectsListPage() {
               <tr>
                 <th className="px-6 py-3">Project Title</th>
                 <th className="px-6 py-3">Client</th>
-                <th className="px-6 py-3">Type</th>
+                <th className="px-6 py-3">Services</th>
                 <th className="px-6 py-3">Status</th>
                 <th className="px-6 py-3">Shoot Date</th>
                 <th className="px-6 py-3">Invoices</th>
@@ -223,9 +275,13 @@ export default function ProjectsListPage() {
                 projects.map((project) => (
                   <tr key={project.id} className="border-b hover:bg-neutral-50">
                     <td className="px-6 py-4 font-medium">
-                      <Link href={`/admin/projects/${project.id}`} className="hover:underline text-neutral-900">
+                      <button
+                        type="button"
+                        onClick={() => openProject(project.id)}
+                        className="hover:underline text-neutral-900 text-left"
+                      >
                         {project.title}
-                      </Link>
+                      </button>
                     </td>
                     <td className="px-6 py-4">
                       <Link href={`/admin/clients/${project.clientId}`} className="hover:underline text-blue-600">
@@ -233,7 +289,7 @@ export default function ProjectsListPage() {
                       </Link>
                     </td>
                     <td className="px-6 py-4">
-                      {PROJECT_TYPE_LABELS?.[project.projectType as keyof typeof PROJECT_TYPE_LABELS] || project.projectType}
+                      <ServiceTagBadges tags={project.serviceTags} legacyType={project.projectType} />
                     </td>
                     <td className="px-6 py-4">
                       <Badge variant={getStatusBadgeVariant(project.pipelineStatus) as any}>
@@ -247,11 +303,9 @@ export default function ProjectsListPage() {
                       {project._count?.invoices || 0}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/admin/projects/${project.id}`}>
-                          <Eye className="h-4 w-4" />
-                          <span className="sr-only">View</span>
-                        </Link>
+                      <Button variant="ghost" size="sm" onClick={() => openProject(project.id)}>
+                        <Eye className="h-4 w-4" />
+                        <span className="sr-only">View</span>
                       </Button>
                     </td>
                   </tr>
@@ -261,6 +315,12 @@ export default function ProjectsListPage() {
           </table>
         </div>
       </div>
+
+      <ProjectDetailDialog
+        projectId={viewId}
+        onClose={closeProject}
+        onChanged={fetchProjects}
+      />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
@@ -292,9 +352,12 @@ export default function ProjectsListPage() {
                 <div className="mt-1 relative">
                   <Input
                     value={clientSearch}
-                    onChange={(e) => setClientSearch(e.target.value)}
+                    onChange={(e) => {
+                      setClientSearch(e.target.value);
+                      setShowClientDropdown(true);
+                    }}
                     placeholder="Search clients..."
-                    onFocus={() => clientResults.length > 0 && setShowClientDropdown(true)}
+                    onFocus={() => setShowClientDropdown(true)}
                     onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
                   />
                   {showClientDropdown && clientResults.length > 0 && (
@@ -329,21 +392,45 @@ export default function ProjectsListPage() {
                 required 
                 placeholder="e.g. Summer Campaign Shoot"
               />
+              {similarProjects.length > 0 && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-1.5">
+                  <p className="font-semibold">
+                    {selectedClient &&
+                    similarProjects.some(
+                      (p) => p.clientId === selectedClient.id && p.title.trim().toLowerCase() === title.trim().toLowerCase()
+                    )
+                      ? 'This client already has a project with this exact title.'
+                      : 'Similar projects already exist. Open one instead?'}
+                  </p>
+                  <ul className="space-y-1">
+                    {similarProjects.map((p) => (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsDialogOpen(false);
+                            openProject(p.id);
+                          }}
+                          className="flex w-full items-center justify-between gap-3 rounded px-1.5 py-1 text-left hover:bg-amber-100"
+                        >
+                          <span className="min-w-0 truncate font-medium">{p.title}</span>
+                          <span className="shrink-0 text-amber-800">
+                            {p.client?.companyName}
+                            {' · '}
+                            {PIPELINE_STATUS_LABELS?.[p.pipelineStatus as keyof typeof PIPELINE_STATUS_LABELS] || p.pipelineStatus}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="projectType">Project Type</Label>
-              <select
-                id="projectType"
-                value={projectType}
-                onChange={(e) => setProjectType(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
-                required
-              >
-                {Object.entries(PROJECT_TYPE_LABELS || {}).map(([key, label]) => (
-                  <option key={key} value={key}>{label as string}</option>
-                ))}
-              </select>
+              <Label>Services *</Label>
+              <ServiceTagPicker value={serviceTags} onChange={setServiceTags} />
+              <p className="text-xs text-neutral-500">Pick every service this project involves. Invoices for it will offer only these services' prices.</p>
             </div>
 
             <div className="space-y-2">

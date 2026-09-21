@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/refresh-button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
@@ -63,7 +64,8 @@ export default function AlertsPage() {
   const runSweep = useCallback(async (isManualTrigger = false) => {
     if (isManualTrigger) setRunning(true);
     try {
-      const res = await fetch('/api/cron/overdue-sweeper', {
+      // Only the manual 'Run Overdue Sweeper Now' button sends alerts; loading/refreshing just reads the overdue list
+      const res = await fetch(`/api/cron/overdue-sweeper${isManualTrigger ? '' : '?notify=false'}`, {
         method: 'POST',
       });
       const data = await res.json();
@@ -97,15 +99,15 @@ export default function AlertsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-neutral-900 flex items-center gap-2.5">
+          <div className="flex items-center gap-2"><h1 className="text-2xl font-bold tracking-tight text-neutral-900 flex items-center gap-2.5">
             <Bell className="h-6 w-6 text-red-600" /> Overdue Sweeper & Internal Alerts
-          </h1>
+          </h1><RefreshButton onRefresh={() => runSweep(false)} /></div>
           <p className="text-neutral-500">
             Daily automated background job querying late invoices and notifying management via Discord/Slack/Email
           </p>
         </div>
 
-        <Button onClick={() => runSweep(true)} disabled={running} className="h-10">
+        <Button onClick={() => runSweep(true)} disabled={running} className="h-10 keep-light-palette border border-[#404040]">
           {running ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Running Sweep...
@@ -119,7 +121,7 @@ export default function AlertsPage() {
       </div>
 
       {/* Schedule Banner */}
-      <Card className="bg-gradient-to-r from-neutral-900 to-neutral-800 text-white border-0 shadow-md">
+      <Card className="keep-light-palette bg-gradient-to-r from-neutral-900 to-neutral-800 text-white border-0 shadow-md">
         <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">

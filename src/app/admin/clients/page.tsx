@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import Link from 'next/link';
+import { ClientDetailDialog } from '@/components/client-detail-dialog';
+import { PhoneInput } from '@/components/phone-input';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/refresh-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -79,6 +81,23 @@ export default function ClientsPage() {
     return () => clearTimeout(timer);
   }, [search, fetchClients]);
 
+  // Client detail pop-up. `?view=<id>` deep-links (dashboard, redirects) open it on load.
+  const [viewId, setViewId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('view');
+    if (id) setViewId(id);
+  }, []);
+
+  const openClient = (id: string) => setViewId(id);
+
+  const closeClient = () => {
+    setViewId(null);
+    if (window.location.search.includes('view=')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -126,7 +145,7 @@ export default function ClientsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
+        <div className="flex items-center gap-2"><h1 className="text-3xl font-bold tracking-tight">Clients</h1><RefreshButton onRefresh={() => fetchClients(search)} /></div>
         <Button onClick={() => setIsDialogOpen(true)} className="flex items-center gap-2">
           <UserPlus className="h-4 w-4" />
           Add Client
@@ -177,10 +196,14 @@ export default function ClientsPage() {
                 clients.map((client) => (
                   <tr key={client.id} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                     <td className="p-4 align-middle">
-                      <Link href={`/admin/clients/${client.id}`} className="font-medium hover:underline text-primary flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openClient(client.id)}
+                        className="font-medium hover:underline text-primary flex items-center gap-2 text-left"
+                      >
                         <Building2 className="h-4 w-4 text-muted-foreground" />
                         {client.companyName}
-                      </Link>
+                      </button>
                     </td>
                     <td className="p-4 align-middle">{client.contactName}</td>
                     <td className="p-4 align-middle">{client.email}</td>
@@ -191,11 +214,9 @@ export default function ClientsPage() {
                     </td>
                     <td className="p-4 align-middle">
                       <div className="flex items-center gap-2">
-                        <Link href={`/admin/clients/${client.id}`}>
-                          <Button variant="ghost" size="icon" title="View details">
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
-                        </Link>
+                        <Button variant="ghost" size="icon" title="View details" onClick={() => openClient(client.id)}>
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -205,6 +226,12 @@ export default function ClientsPage() {
           </table>
         </div>
       </Card>
+
+      <ClientDetailDialog
+        clientId={viewId}
+        onClose={closeClient}
+        onChanged={() => fetchClients(search)}
+      />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
@@ -230,7 +257,7 @@ export default function ClientsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone</Label>
-                <Input id="phone" name="phone" type="tel" value={formData.phone} onChange={handleInputChange} />
+                <PhoneInput id="phone" value={formData.phone} onChange={(v) => setFormData((prev) => ({ ...prev, phone: v }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="uen">UEN</Label>

@@ -462,7 +462,8 @@ function SigningPortal() {
                     </Button>
                   </div>
 
-                  <div className="relative border-2 border-dashed border-neutral-300 rounded-xl bg-white overflow-hidden shadow-inner touch-none">
+                  {/* Fixed white (not themed) so the ink is always visible and matches what is captured */}
+                  <div className="relative border-2 border-dashed border-neutral-300 rounded-xl bg-[#ffffff] overflow-hidden shadow-inner touch-none">
                     <canvas
                       ref={canvasRef}
                       onMouseDown={startDrawing}

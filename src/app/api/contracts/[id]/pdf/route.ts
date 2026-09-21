@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { getCompanySettings } from '@/lib/company-settings';
+import { resolveCompany } from '@/lib/payment-snapshot';
 import { generateContractPDF } from '@/lib/contract-pdf-generator';
 
 function tokensMatch(a: string, b: string): boolean {
@@ -49,7 +51,9 @@ export async function GET(
   }
 
   try {
+    const company = resolveCompany(contract.invoice, await getCompanySettings());
     const pdfBytes = await generateContractPDF({
+      company,
       title: contract.title,
       contractBody: contract.contractBody,
       isSigned: contract.isSigned,

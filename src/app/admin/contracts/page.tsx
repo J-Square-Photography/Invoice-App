@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/refresh-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -89,6 +90,8 @@ export default function ContractsPage() {
   const [creating, setCreating] = useState(false);
   const [invoices, setInvoices] = useState<InvoiceOption[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
+  // Studio name/UEN from Settings, used when rendering contract templates
+  const studioRef = useRef<Record<string, string>>({});
 
   const [selectedInvoiceId, setSelectedInvoiceId] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('STANDARD_PHOTOGRAPHY');
@@ -127,6 +130,17 @@ export default function ContractsPage() {
   const loadInvoices = async () => {
     setLoadingInvoices(true);
     try {
+      try {
+        const sres = await fetch('/api/settings');
+        if (sres.ok) {
+          const sdata = await sres.json();
+          studioRef.current = {
+            company_uen: sdata.settings.uen,
+            studio_name: String(sdata.settings.companyName).toUpperCase(),
+          };
+        }
+      } catch {
+      }
       const res = await fetch('/api/invoices');
       if (res.ok) {
         const data = await res.json();
@@ -152,7 +166,14 @@ export default function ContractsPage() {
     if (invoice) {
       const deposit = (invoice.totalAmount * 0.5).toFixed(2);
       const balance = (invoice.totalAmount - parseFloat(deposit)).toFixed(2);
+      // A sent invoice's contract uses the details that invoice was issued with
+      const snap = invoice.paymentSnapshot;
+      const studio =
+        snap && typeof snap.uen === 'string' && typeof snap.companyName === 'string'
+          ? { company_uen: snap.uen, studio_name: String(snap.companyName).toUpperCase() }
+          : studioRef.current;
       const rendered = renderContractTemplate(tmpl.body, {
+        ...studio,
         company_name: invoice.project.client.companyName,
         client_name: invoice.project.client.contactName,
         project_title: invoice.project.title,
@@ -232,7 +253,7 @@ export default function ContractsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Client Contracts & E-Signatures</h1>
+          <div className="flex items-center gap-2"><h1 className="text-2xl font-bold tracking-tight">Client Contracts & E-Signatures</h1><RefreshButton onRefresh={() => fetchContracts(search, statusFilter)} /></div>
           <p className="text-neutral-500">
             Generate legally binding agreements with zero-cost client signing links and SHA-256 audit trails
           </p>

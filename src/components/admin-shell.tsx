@@ -13,6 +13,7 @@ import {
   FileSignature,
   Bell,
   UserCog,
+  Settings,
   LogOut,
   Loader2,
   Menu,
@@ -21,6 +22,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { LogoToggle } from '@/components/logo-toggle';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -33,6 +35,7 @@ const navigation = [
 
 const adminNavigation = [
   { name: 'Team', href: '/admin/team', icon: UserCog },
+  { name: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -63,9 +66,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex h-screen w-64 flex-col border-r border-neutral-200 bg-white shrink-0">
         {/* Logo */}
         <div className="flex h-16 items-center gap-3 border-b border-neutral-200 px-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-neutral-900 p-1.5 shrink-0">
-            <img src="/logo-white.png" alt="J Square" className="h-full w-full object-contain" />
-          </div>
+          <LogoToggle className="h-9 w-9 p-1.5" />
           <div>
             <p className="text-sm font-semibold text-neutral-900">J Square Photography</p>
             <p className="text-xs text-neutral-500">CRM</p>
@@ -122,7 +123,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       {item.name}
                     </div>
                     <span className="text-[10px] font-semibold uppercase tracking-wider bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded">
-                      Admin
+                      Developer
                     </span>
                   </Link>
                 );
@@ -142,7 +143,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <div className="min-w-0 pr-2">
                 <p className="truncate text-sm font-medium text-neutral-900">{user.name}</p>
                 <p className="truncate text-xs text-neutral-500">
-                  {user.role === 'SUPER_ADMIN' ? 'Super Admin' : 'Manager'}
+                  {user.role === 'SUPER_ADMIN' ? 'Developer' : 'Manager'}
                 </p>
               </div>
               <Button variant="ghost" size="icon" onClick={logout} title="Sign out" className="shrink-0">
@@ -174,9 +175,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         {/* Drawer Header with Close Button */}
         <div className="flex h-16 items-center justify-between border-b border-neutral-200 px-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-900 p-1.5 shrink-0">
-              <img src="/logo-white.png" alt="J Square" className="h-full w-full object-contain" />
-            </div>
+            <LogoToggle className="h-8 w-8 p-1.5" />
             <div>
               <p className="text-sm font-bold text-neutral-900">J Square CRM</p>
               <p className="text-[11px] text-neutral-500">Studio Management</p>
@@ -252,7 +251,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                           : 'bg-neutral-100 text-neutral-600'
                       )}
                     >
-                      Admin
+                      Developer
                     </span>
                   </Link>
                 );
@@ -278,7 +277,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     <Shield className="h-3 w-3 text-neutral-600" />
                   )}
                   <p className="truncate text-xs text-neutral-500">
-                    {user.role === 'SUPER_ADMIN' ? 'Super Admin' : 'Manager'}
+                    {user.role === 'SUPER_ADMIN' ? 'Developer' : 'Manager'}
                   </p>
                 </div>
               </div>
@@ -312,9 +311,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <Menu className="h-5 w-5 text-neutral-800" />
             </Button>
             <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-900 p-1 shrink-0">
-                <img src="/logo-white.png" alt="J Square" className="h-full w-full object-contain" />
-              </div>
+              <LogoToggle className="h-7 w-7 p-1" />
               <span className="text-sm font-bold text-neutral-900 tracking-tight">J Square</span>
             </div>
           </div>
@@ -322,7 +319,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             {user && (
               <span className="text-xs font-medium text-neutral-600 bg-neutral-100 px-2 py-1 rounded-md">
-                {user.role === 'SUPER_ADMIN' ? 'Admin' : 'Manager'}
+                {user.role === 'SUPER_ADMIN' ? 'Developer' : 'Manager'}
               </span>
             )}
             <Button

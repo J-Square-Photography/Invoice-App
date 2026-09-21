@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { rankClients } from '@/lib/search-rank';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -12,27 +13,31 @@ export async function GET(request: NextRequest) {
 
   // If limit is set, return slim results for autocomplete
   if (limit) {
-    const clients = await prisma.client.findMany({
+    const wanted = Math.min(Math.max(parseInt(limit, 10) || 8, 1), 25);
+    // Pull a wider candidate set, then rank so the best matches (names starting with
+    // what was typed) come first before cutting down to the requested number.
+    const candidates = await prisma.client.findMany({
       where: q ? {
         OR: [
-          { companyName: { contains: q } },
-          { contactName: { contains: q } },
-          { email: { contains: q } },
+          { companyName: { contains: q, mode: 'insensitive' } },
+          { contactName: { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: 'insensitive' } },
         ],
       } : undefined,
       select: { id: true, companyName: true, contactName: true, email: true },
-      take: parseInt(limit, 10),
+      take: 100,
       orderBy: { companyName: 'asc' },
     });
+    const clients = rankClients(candidates, q).slice(0, wanted);
     return NextResponse.json({ clients });
   }
 
   const clients = await prisma.client.findMany({
     where: q ? {
       OR: [
-        { companyName: { contains: q } },
-        { contactName: { contains: q } },
-        { email: { contains: q } },
+        { companyName: { contains: q, mode: 'insensitive' } },
+        { contactName: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
       ],
     } : undefined,
     include: {

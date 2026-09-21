@@ -19,7 +19,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
+import { InvoiceFormDialog } from '@/components/invoice-form-dialog';
+import { ServiceTagBadges } from '@/components/service-tag-picker';
 import {
+  Pencil,
+  Undo2,
+  Lock,
   ArrowLeft,
   Download,
   DollarSign,
@@ -37,6 +42,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
+import { describeDiscount } from '@/lib/invoice-calculations';
 
 interface InvoiceDetail {
   id: string;
@@ -44,6 +50,8 @@ interface InvoiceDetail {
   issueDate: string;
   dueDate: string;
   subtotal: number;
+  discountAmount?: number;
+  discounts?: Array<{ name: string; type: string; value: number; amount: number; priceBefore: number; priceAfter: number }> | null;
   isGstApplied: boolean;
   gstRate: number;
   gstAmount: number;
@@ -57,6 +65,7 @@ interface InvoiceDetail {
     id: string;
     title: string;
     projectType: string;
+    serviceTags?: string[];
     client: {
       id: string;
       companyName: string;
@@ -107,11 +116,23 @@ export default function InvoiceDetailPage() {
 
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
-  const [sgqr, setSgqr] = useState<{ payload: string; dataUrl: string } | null>(null);
+  const [sgqr, setSgqr] = useState<{
+    payload: string;
+    dataUrl: string;
+    mode?: 'dynamic' | 'static' | 'static-missing';
+  } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [detailsFrozen, setDetailsFrozen] = useState(false);
 
   // Status updating
   const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  // Edit invoice pop-up
+  const [editOpen, setEditOpen] = useState(false);
+
+  // Revert-payment confirmation
+  const [revertOpen, setRevertOpen] = useState(false);
+  const [reverting, setReverting] = useState(false);
 
   // Payment Recording Dialog
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -133,6 +154,7 @@ export default function InvoiceDetailPage() {
         const data = await res.json();
         setInvoice(data.invoice);
         setPaymentConfig(data.paymentConfig);
+        setDetailsFrozen(!!data.paymentDetailsFrozen);
         setSgqr(data.sgqr);
         setPaymentAmount(data.invoice.balanceDue > 0 ? data.invoice.balanceDue.toString() : '');
       } else {
@@ -226,6 +248,26 @@ export default function InvoiceDetailPage() {
     toast({ title: 'Copied', description: 'Copied to clipboard' });
   };
 
+  // Revert a paid invoice: clears the ledger and reopens it
+  const handleRevert = async () => {
+    setReverting(true);
+    try {
+      const res = await fetch(`/api/invoices/${id}/revert`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: 'Revert Failed', description: data.error || 'Could not revert invoice.', variant: 'destructive' });
+        return;
+      }
+      toast({ title: 'Invoice Reverted', description: data.message });
+      setRevertOpen(false);
+      fetchInvoice();
+    } catch {
+      toast({ title: 'Error', description: 'Network error occurred', variant: 'destructive' });
+    } finally {
+      setReverting(false);
+    }
+  };
+
   const handleDeleteInvoice = async () => {
     if (!confirm(`Are you sure you want to delete invoice ${invoice?.invoiceNumber}? This action cannot be undone.`)) return;
     try {
@@ -264,6 +306,8 @@ export default function InvoiceDetailPage() {
   }
 
   const isOverdue = invoice.status !== 'PAID' && invoice.status !== 'VOID' && new Date(invoice.dueDate) < new Date();
+  const isPaid = invoice.status === 'PAID';
+  const discountList = Array.isArray(invoice.discounts) ? invoice.discounts : [];
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
@@ -300,13 +344,14 @@ export default function InvoiceDetailPage() {
           <Select
             value={invoice.status}
             onChange={(e) => handleUpdateStatus(e.target.value)}
-            disabled={updatingStatus}
+            disabled={updatingStatus || isPaid}
             className="w-36 h-9 text-xs"
           >
-            <option value="DRAFT">Mark: Draft</option>
-            <option value="SENT">Mark: Sent</option>
-            <option value="PARTIAL">Mark: Partial</option>
-            <option value="PAID">Mark: Paid</option>
+            {/* Once payments exist, status follows them: only Void can be chosen by hand */}
+            {(invoice.paidAmount <= 0 || invoice.status === 'VOID') && <option value="DRAFT">Mark: Draft</option>}
+            {(invoice.paidAmount <= 0 || invoice.status === 'VOID') && <option value="SENT">Mark: Sent</option>}
+            {invoice.status === 'PARTIAL' && <option value="PARTIAL">Partial (from payments)</option>}
+            {isPaid && <option value="PAID">Paid (locked)</option>}
             <option value="VOID">Mark: Void</option>
           </Select>
 
@@ -324,16 +369,40 @@ export default function InvoiceDetailPage() {
             </Button>
           </a>
 
-          {/* Delete Invoice */}
-          <Button
-            variant="outline"
-            className="h-9 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-            onClick={handleDeleteInvoice}
-          >
-            <Trash2 className="mr-1.5 h-4 w-4" /> Delete
-          </Button>
+          {isPaid ? (
+            /* Paid invoices are locked: reverting is the only way to change them */
+            <Button variant="outline" className="h-9 text-xs" onClick={() => setRevertOpen(true)}>
+              <Undo2 className="mr-1.5 h-4 w-4" /> Revert Payment
+            </Button>
+          ) : (
+            <>
+              {/* Edit Invoice */}
+              <Button variant="outline" className="h-9 text-xs" onClick={() => setEditOpen(true)}>
+                <Pencil className="mr-1.5 h-4 w-4" /> Edit
+              </Button>
+
+              {/* Delete Invoice */}
+              <Button
+                variant="outline"
+                className="h-9 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                onClick={handleDeleteInvoice}
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+              </Button>
+            </>
+          )}
         </div>
       </div>
+
+      {isPaid && (
+        <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            This invoice is paid and locked. To change it, use <strong>Revert Payment</strong>. That clears the
+            payment ledger and reopens the invoice.
+          </p>
+        </div>
+      )}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -364,11 +433,7 @@ export default function InvoiceDetailPage() {
                 <p className="text-xs font-semibold text-neutral-400 uppercase">Assignment Info</p>
                 <p className="font-semibold text-neutral-900 mt-1">{invoice.project.title}</p>
                 <p className="text-neutral-600 text-xs">Due: {new Date(invoice.dueDate).toLocaleDateString('en-SG', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
-                <div className="mt-2">
-                  <Badge variant="outline" className="text-xs">
-                    {invoice.project.projectType.replace('_', ' ')}
-                  </Badge>
-                </div>
+                <div className="mt-2"><ServiceTagBadges tags={invoice.project.serviceTags} legacyType={invoice.project.projectType} /></div>
               </div>
             </CardContent>
           </Card>
@@ -403,9 +468,31 @@ export default function InvoiceDetailPage() {
               {/* Totals Breakdown */}
               <div className="border-t border-neutral-200 p-4 bg-neutral-50 space-y-2 text-sm">
                 <div className="flex justify-between text-neutral-600 text-xs">
-                  <span>Subtotal:</span>
+                  <span>{discountList.length > 0 ? 'Price before discounts:' : 'Subtotal:'}</span>
                   <span>SGD ${invoice.subtotal.toFixed(2)}</span>
                 </div>
+
+                {discountList.map((d, i) => (
+                  <div key={i} className="text-xs space-y-0.5">
+                    <div className="flex justify-between gap-3 text-neutral-600">
+                      <span className="min-w-0 truncate">
+                        {i + 1}. {describeDiscount(d)}
+                      </span>
+                      <span className="shrink-0 text-emerald-700">-SGD ${Number(d.amount).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between pl-4 text-neutral-500">
+                      <span>Price after discount:</span>
+                      <span>SGD ${Number(d.priceAfter).toFixed(2)}</span>
+                    </div>
+                  </div>
+                ))}
+
+                {discountList.length > 0 && (
+                  <div className="flex justify-between border-t border-neutral-200 pt-1 text-xs font-medium text-neutral-800">
+                    <span>Price after all discounts:</span>
+                    <span>SGD ${(invoice.subtotal - Number(invoice.discountAmount ?? 0)).toFixed(2)}</span>
+                  </div>
+                )}
 
                 {invoice.isGstApplied && (
                   <div className="flex justify-between text-neutral-600 text-xs">
@@ -513,16 +600,24 @@ export default function InvoiceDetailPage() {
                 <QrCode className="h-4 w-4" />
               </div>
               <CardTitle className="text-base font-bold text-red-950">
-                Singapore PayNow SGQR
+                {sgqr?.mode === 'static' || sgqr?.mode === 'static-missing' ? 'Singapore PayNow QR' : 'Singapore PayNow SGQR'}
               </CardTitle>
               <CardDescription className="text-xs text-neutral-600">
-                EMVCo Dynamic QR standard for DBS, OCBC, UOB, GrabPay
+                {sgqr?.mode === 'static' || sgqr?.mode === 'static-missing'
+                  ? 'Static QR uploaded in Settings. The payer enters the amount.'
+                  : 'EMVCo Dynamic QR standard for DBS, OCBC, UOB, GrabPay'}
               </CardDescription>
             </CardHeader>
             <CardContent className="text-center pt-3 space-y-4">
-              {sgqr?.dataUrl ? (
+              {sgqr?.mode === 'static-missing' ? (
+                <div className="py-6 px-2 text-xs text-amber-700">
+                  This invoice uses a static PayNow QR, but none has been uploaded yet. Add one under
+                  Administration → Settings.
+                </div>
+              ) : sgqr?.dataUrl ? (
                 <div className="flex flex-col items-center">
-                  <div className="p-3 bg-white rounded-xl border border-neutral-200 shadow-sm inline-block">
+                  {/* Fixed white (not themed): QR codes must stay scannable in dark mode */}
+                  <div className="p-3 bg-[#ffffff] rounded-xl border border-neutral-300 shadow-sm inline-block">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={sgqr.dataUrl}
@@ -532,7 +627,7 @@ export default function InvoiceDetailPage() {
                   </div>
                   <div className="mt-2 text-center">
                     <p className="text-xs font-semibold text-neutral-900">
-                      Scan SGD ${invoice.balanceDue > 0 ? invoice.balanceDue.toFixed(2) : invoice.totalAmount.toFixed(2)}
+                      {sgqr.mode === 'static' ? 'Scan, then enter SGD' : 'Scan SGD'} ${invoice.balanceDue > 0 ? invoice.balanceDue.toFixed(2) : invoice.totalAmount.toFixed(2)}
                     </p>
                     <p className="text-[11px] text-neutral-500 font-mono">Ref: {invoice.invoiceNumber}</p>
                   </div>
@@ -600,6 +695,14 @@ export default function InvoiceDetailPage() {
             </Card>
           )}
 
+          {paymentConfig && (
+            <p className="px-1 text-center text-[11px] text-neutral-500">
+              {detailsFrozen
+                ? 'Payment details are locked as issued on this invoice.'
+                : 'Draft: payment details follow Settings until this invoice is marked Sent.'}
+            </p>
+          )}
+
           {/* E-Signature Contract Card */}
           <Card>
             <CardHeader className="pb-2">
@@ -611,9 +714,9 @@ export default function InvoiceDetailPage() {
               {invoice.contract ? (
                 <div className="space-y-2">
                   <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-                    <div className="flex justify-between items-center">
-                      <p className="font-semibold text-emerald-900">{invoice.contract.title || 'Client Agreement'}</p>
-                      <Badge variant={invoice.contract.isSigned ? 'success' : 'warning'}>
+                    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+                      <p className="min-w-0 flex-1 basis-40 font-semibold leading-snug text-emerald-900">{invoice.contract.title || 'Client Agreement'}</p>
+                      <Badge variant={invoice.contract.isSigned ? 'success' : 'warning'} className="shrink-0 whitespace-nowrap">
                         {invoice.contract.isSigned ? 'Signed & Sealed' : 'Pending Signature'}
                       </Badge>
                     </div>
@@ -653,6 +756,36 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
+      {/* Revert Payment Confirmation */}
+      <Dialog open={revertOpen} onOpenChange={setRevertOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Revert {invoice.invoiceNumber}?</DialogTitle>
+            <DialogDescription>
+              This clears {invoice.paymentLogs.length} payment record{invoice.paymentLogs.length === 1 ? '' : 's'} (SGD ${invoice.paidAmount.toFixed(2)}) from the ledger and reopens the invoice
+              with SGD ${invoice.totalAmount.toFixed(2)} outstanding. You will be able to edit it again. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-2">
+            <Button variant="outline" onClick={() => setRevertOpen(false)} disabled={reverting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleRevert} disabled={reverting}>
+              {reverting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Revert Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Invoice Dialog */}
+      <InvoiceFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        invoice={invoice}
+        onSaved={fetchInvoice}
+      />
+
       {/* Record Payment Installment Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
         <DialogContent>
@@ -672,7 +805,13 @@ export default function InvoiceDetailPage() {
                 step="0.01"
                 min="0.01"
                 value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
+                max={invoice.balanceDue}
+                onChange={(e) => {
+                  // Never let the amount exceed what is still owed
+                  const v = e.target.value;
+                  const n = parseFloat(v);
+                  setPaymentAmount(!isNaN(n) && n > invoice.balanceDue ? invoice.balanceDue.toFixed(2) : v);
+                }}
                 placeholder="e.g. 750.00"
                 required
               />

@@ -28,6 +28,7 @@ function createPrismaClient() {
     result: {
       invoice: {
         subtotal: { needs: { subtotal: true }, compute: (invoice) => Number(invoice.subtotal) },
+        discountAmount: { needs: { discountAmount: true }, compute: (invoice) => Number(invoice.discountAmount) },
         gstAmount: { needs: { gstAmount: true }, compute: (invoice) => Number(invoice.gstAmount) },
         totalAmount: { needs: { totalAmount: true }, compute: (invoice) => Number(invoice.totalAmount) },
         paidAmount: { needs: { paidAmount: true }, compute: (invoice) => Number(invoice.paidAmount) },

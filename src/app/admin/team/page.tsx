@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/refresh-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
@@ -17,7 +18,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { UserPlus, Shield, ShieldCheck, Loader2, Trash2, Sparkles, Eye, EyeOff, Pencil } from 'lucide-react';
+import { UserPlus, Shield, ShieldCheck, Loader2, Trash2, Eye, EyeOff, Pencil, AlertTriangle } from 'lucide-react';
+import { ResetDataDialog } from '@/components/reset-data-dialog';
 
 interface TeamUser {
   id: string;
@@ -35,7 +37,7 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [cleaningTestData, setCleaningTestData] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
 
   // Create Form state
   const [newName, setNewName] = useState('');
@@ -85,28 +87,6 @@ export default function TeamPage() {
       }
     } catch {
       toast({ title: 'Error', description: 'Network error deleting user.', variant: 'destructive' });
-    }
-  }
-
-  async function handleCleanTestData() {
-    if (!confirm('This will purge all automated test records (dummy test managers, test clients, and test invoices) generated during tests. Your current admin account will be kept safe. Proceed?')) return;
-    try {
-      setCleaningTestData(true);
-      const res = await fetch('/api/admin/clean-test-data', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        toast({
-          title: 'Database Cleaned',
-          description: `Removed ${data.deleted.users} test accounts, ${data.deleted.invoices} test invoices, and ${data.deleted.clients} test clients.`,
-        });
-        fetchUsers();
-      } else {
-        toast({ title: 'Error', description: data.error || 'Failed to clean test data.', variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Error', description: 'Network error cleaning test data.', variant: 'destructive' });
-    } finally {
-      setCleaningTestData(false);
     }
   }
 
@@ -239,25 +219,16 @@ export default function TeamPage() {
     <div>
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Team Management</h1>
+          <div className="flex items-center gap-2"><h1 className="text-2xl font-bold tracking-tight">Team Management</h1><RefreshButton onRefresh={fetchUsers} /></div>
           <p className="text-neutral-500">Manage your team members, permissions, and staff accounts</p>
         </div>
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
-            onClick={handleCleanTestData}
-            disabled={cleaningTestData}
-            className="text-amber-700 border-amber-300 hover:bg-amber-50"
+            onClick={() => setResetOpen(true)}
+            className="text-red-700 border-red-300 hover:bg-red-50"
           >
-            {cleaningTestData ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cleaning...
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4 text-amber-600" /> Clean Test Data
-              </>
-            )}
+            <AlertTriangle className="mr-2 h-4 w-4 text-red-600" /> Delete All Data
           </Button>
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -329,7 +300,7 @@ export default function TeamPage() {
                   onChange={(e) => setNewRole(e.target.value)}
                 >
                   <option value="MANAGER">Manager / Finance</option>
-                  <option value="SUPER_ADMIN">Super Admin</option>
+                  <option value="SUPER_ADMIN">Developer</option>
                 </Select>
               </div>
               <DialogFooter>
@@ -384,7 +355,7 @@ export default function TeamPage() {
                       <td className="py-3">
                         <Badge variant={member.role === 'SUPER_ADMIN' ? 'default' : 'secondary'}>
                           {member.role === 'SUPER_ADMIN' ? (
-                            <><ShieldCheck className="mr-1 h-3 w-3" /> Admin</>
+                            <><ShieldCheck className="mr-1 h-3 w-3" /> Developer</>
                           ) : (
                             <><Shield className="mr-1 h-3 w-3" /> Manager</>
                           )}
@@ -442,6 +413,8 @@ export default function TeamPage() {
           )}
         </CardContent>
       </Card>
+
+      <ResetDataDialog open={resetOpen} onOpenChange={setResetOpen} />
 
       {/* Edit Member Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
@@ -511,10 +484,10 @@ export default function TeamPage() {
                 disabled={editingUser?.id === user?.userId}
               >
                 <option value="MANAGER">Manager / Finance</option>
-                <option value="SUPER_ADMIN">Super Admin</option>
+                <option value="SUPER_ADMIN">Developer</option>
               </Select>
               {editingUser?.id === user?.userId && (
-                <p className="text-[11px] text-neutral-400">You cannot demote your own Super Admin role.</p>
+                <p className="text-[11px] text-neutral-400">You cannot demote your own Developer role.</p>
               )}
             </div>
             <DialogFooter>

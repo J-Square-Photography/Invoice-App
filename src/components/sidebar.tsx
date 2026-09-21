@@ -12,10 +12,12 @@ import {
   FileSignature,
   Bell,
   UserCog,
+  Settings,
   LogOut,
   Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { LogoToggle } from '@/components/logo-toggle';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -28,6 +30,7 @@ const navigation = [
 
 const adminNavigation = [
   { name: 'Team', href: '/admin/team', icon: UserCog },
+  { name: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 
 export function Sidebar() {
@@ -38,9 +41,7 @@ export function Sidebar() {
     <aside className="flex h-screen w-64 flex-col border-r border-neutral-200 bg-white">
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 border-b border-neutral-200 px-6">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-neutral-900 p-1.5 shrink-0">
-          <img src="/logo-white.png" alt="J Square" className="h-full w-full object-contain" />
-        </div>
+        <LogoToggle className="h-9 w-9 p-1.5" />
         <div>
           <p className="text-sm font-semibold">J Square Photography</p>
           <p className="text-xs text-neutral-500">CRM</p>
@@ -96,7 +97,7 @@ export function Sidebar() {
                     {item.name}
                   </div>
                   <span className="text-[10px] font-semibold uppercase tracking-wider bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded">
-                    Admin
+                    Developer
                   </span>
                 </Link>
               );
@@ -115,7 +116,7 @@ export function Sidebar() {
           <div className="flex items-center justify-between">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{user.name}</p>
-              <p className="truncate text-xs text-neutral-500">{user.role === 'SUPER_ADMIN' ? 'Super Admin' : 'Manager'}</p>
+              <p className="truncate text-xs text-neutral-500">{user.role === 'SUPER_ADMIN' ? 'Developer' : 'Manager'}</p>
             </div>
             <Button variant="ghost" size="icon" onClick={logout} title="Sign out">
               <LogOut className="h-4 w-4" />

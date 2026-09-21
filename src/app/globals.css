@@ -1,1 +1,117 @@
 @import "tailwindcss";
+
+/*
+ * Dark mode. The app styles itself with Tailwind's neutral scale (bg-white,
+ * text-neutral-900, ...). Tailwind v4 reads those from CSS variables, so adding
+ * the `dark` class to <html> and inverting the scale re-themes every page at
+ * once. Toggled by clicking the logo (see src/lib/theme.ts).
+ */
+.dark {
+  color-scheme: dark;
+
+  --color-white: #171717;
+  --color-neutral-50: #0a0a0a;
+  --color-neutral-100: #1f1f1f;
+  --color-neutral-200: #2e2e2e;
+  --color-neutral-300: #404040;
+  --color-neutral-400: #737373;
+  --color-neutral-500: #a3a3a3;
+  --color-neutral-600: #bdbdbd;
+  --color-neutral-700: #d4d4d4;
+  --color-neutral-800: #e5e5e5;
+  --color-neutral-900: #fafafa;
+  --color-neutral-950: #ffffff;
+
+  /* Tinted notice panels and badges: dark tints with light text */
+  --color-amber-50: #2a2210;
+  --color-amber-100: #3a2e10;
+  --color-amber-200: #5c4a14;
+  --color-amber-300: #7a6018;
+  --color-amber-400: #92721a;
+  --color-amber-600: #fbbf24;
+  --color-amber-700: #fcd34d;
+  --color-amber-800: #fde68a;
+  --color-amber-900: #fef3c7;
+  --color-amber-950: #fffbeb;
+
+  --color-blue-50: #0f1e3a;
+  --color-blue-100: #14284d;
+  --color-blue-200: #1e3a6e;
+  --color-blue-700: #93c5fd;
+  --color-blue-800: #bfdbfe;
+
+  --color-red-50: #2a1214;
+  --color-red-100: #3b1519;
+  --color-red-200: #5c1f24;
+  --color-red-300: #7a2a2f;
+  --color-red-600: #f87171;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+
+  --color-emerald-50: #0d2a20;
+  --color-emerald-100: #113a2c;
+  --color-emerald-200: #1b5c45;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+  --color-emerald-900: #d1fae5;
+
+  --color-green-50: #0d2a17;
+  --color-green-100: #123b20;
+  --color-green-800: #bbf7d0;
+}
+
+/*
+ * Opt-out for elements that must look the same in dark mode as in light mode
+ * (e.g. the dark cron banner). Restores the original neutral palette for the
+ * element and everything inside it. Usage: add class "keep-light-palette".
+ */
+.dark .keep-light-palette {
+  color-scheme: light;
+
+  --color-white: #ffffff;
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-900: #171717;
+  --color-neutral-950: #0a0a0a;
+}
+
+/*
+ * Phones: a wide table inside a scrolling wrapper must not make the whole page
+ * wider than the screen. Without this the browser zooms out to fit the table, so
+ * you can swipe sideways into empty space and centred pop-ups land half off-screen.
+ * Containment keeps the table's width inside its own wrapper.
+ */
+:where(div, section):has(> table) {
+  contain: layout paint;
+}
+
+/* Borders that don't name a colour follow the theme (utilities still win). */
+@layer base {
+  .dark *,
+  .dark ::after,
+  .dark ::before {
+    border-color: var(--color-neutral-200);
+  }
+}
+
+/* Native dropdown lists are drawn by the browser and don't follow the page's
+   colours, so without this the option text (light) sat on a light list. */
+.dark select,
+.dark option,
+.dark optgroup {
+  background-color: var(--color-white);
+  color: var(--color-neutral-900);
+}
+
+/* The logo mark is white on a dark tile. In dark mode the tile turns light, so
+   the mark flips to black. */
+.dark .logo-mark {
+  filter: invert(1);
+}

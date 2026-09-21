@@ -70,7 +70,7 @@ function DialogContent({
       {/* Content */}
       <div
         className={cn(
-          'relative z-50 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg border border-neutral-200 bg-white p-6 shadow-lg',
+          'relative z-50 w-full min-w-0 max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden rounded-lg border border-neutral-200 bg-white p-6 shadow-lg',
           className
         )}
         {...props}

@@ -159,14 +159,14 @@ export default function ContractDetailPage() {
             </Button>
           </Link>
           <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl font-bold tracking-tight text-neutral-900">{contract.title}</h1>
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+              <h1 className="min-w-0 text-xl font-bold tracking-tight text-neutral-900">{contract.title}</h1>
               {contract.isSigned ? (
-                <Badge variant="success">
+                <Badge variant="success" className="shrink-0 whitespace-nowrap">
                   <ShieldCheck className="mr-1 h-3 w-3" /> Signed & Sealed
                 </Badge>
               ) : (
-                <Badge variant="warning">
+                <Badge variant="warning" className="shrink-0 whitespace-nowrap">
                   <Clock className="mr-1 h-3 w-3" /> Pending Client Signature
                 </Badge>
               )}
@@ -316,7 +316,8 @@ export default function ContractDetailPage() {
               {/* Signature Image Render */}
               <div className="pt-2">
                 <p className="text-neutral-500 font-medium mb-1">Captured Signature Pad Raster:</p>
-                <div className="p-3 bg-white rounded-lg border border-neutral-200 inline-block">
+                {/* Fixed white (not themed) so the signature always shows exactly as signed */}
+                <div className="p-3 bg-[#ffffff] rounded-lg border border-neutral-300 inline-block">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={contract.signatureAudit.signatureImageBase64}

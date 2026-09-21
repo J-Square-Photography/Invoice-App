@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
-import { defaultPaymentConfig } from './payment-config';
+import { defaultPaymentConfig, type CompanyPaymentConfig } from './payment-config';
 
 export interface ContractPDFData {
   title: string;
@@ -15,6 +15,8 @@ export interface ContractPDFData {
   projectTitle: string;
   invoiceNumber: string;
   totalAmount: number;
+  /** Company details from Settings. Falls back to the environment defaults. */
+  company?: Pick<CompanyPaymentConfig, 'companyName' | 'uen'>;
   signatureAudit?: {
     signatureImageBase64: string;
     signerName: string;
@@ -27,6 +29,7 @@ export interface ContractPDFData {
 }
 
 export async function generateContractPDF(data: ContractPDFData): Promise<Uint8Array> {
+  const cfg = data.company ?? defaultPaymentConfig;
   const pdfDoc = await PDFDocument.create();
   let page = pdfDoc.addPage(PageSizes.A4);
   let { width, height } = page.getSize();
@@ -48,7 +51,7 @@ export async function generateContractPDF(data: ContractPDFData): Promise<Uint8A
   let y = height - 50;
 
   // --- 1. HEADER ---
-  page.drawText(defaultPaymentConfig.companyName.toUpperCase(), {
+  page.drawText(cfg.companyName.toUpperCase(), {
     x: 50,
     y,
     size: 16,
@@ -57,7 +60,7 @@ export async function generateContractPDF(data: ContractPDFData): Promise<Uint8A
   });
 
   y -= 14;
-  page.drawText(`Singapore UEN: ${defaultPaymentConfig.uen} • Digital Service Agreement`, {
+  page.drawText(`Singapore UEN: ${cfg.uen} • Digital Service Agreement`, {
     x: 50,
     y,
     size: 8.5,
