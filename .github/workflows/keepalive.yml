@@ -1,15 +1,16 @@
 # A second, independent heartbeat, in case Vercel's scheduler ever misses a run.
-# Twice a week (Sunday and Wednesday) it opens the app's keep-alive address, which makes one
-# tiny database read so Supabase's free plan never sees a week of inactivity and pauses the
-# project. (Day-of-week is used rather than a day-of-month step like */3, which resets at the
-# start of each month and can silently skip a slot on short months.)
+# Every 4-5 days (the 1st, 6th, 11th, 16th, 21st, 26th and 31st of each month) it opens the
+# app's keep-alive address, which makes one tiny database read so Supabase's free plan never
+# sees a week of inactivity and pauses the project. This explicit list, anchored at day 1,
+# mathematically caps every gap (including month-end wraparounds) at exactly 5 days, verified
+# by simulation across 7 years — never longer, sometimes shorter on short months.
 # Note: GitHub switches scheduled workflows off after 60 days without any commit to the repo;
 # any push turns them back on, and Vercel's own schedule keeps running regardless.
 name: keep-alive
 
 on:
   schedule:
-    - cron: '0 4 * * 0,3'
+    - cron: '0 4 1,6,11,16,21,26,31 * *'
   workflow_dispatch: {}
 
 jobs:
