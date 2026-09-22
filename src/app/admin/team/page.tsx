@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
-import { formatDate } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/refresh-button';
 import { Input } from '@/components/ui/input';
@@ -78,9 +78,15 @@ function PermissionsEditor({
     else if (p === 'ESSENTIALS') onChange([...ESSENTIALS_PERMISSIONS]);
     // CUSTOM: leave the current selection as-is, just switch the checklist into view
   };
+  // Editing any single box directly is itself a departure from whichever preset was active, so it
+  // switches the highlighted button to Custom rather than leaving a preset button lit above a list
+  // that no longer matches it.
   const toggle = (key: PermissionKey) => {
     onChange(value.includes(key) ? value.filter((k) => k !== key) : [...value, key]);
+    setPreset('CUSTOM');
   };
+
+  const followingPreset = preset !== 'CUSTOM';
 
   return (
     <div className="space-y-2">
@@ -106,37 +112,35 @@ function PermissionsEditor({
           </button>
         ))}
       </div>
-      {preset === 'CUSTOM' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 rounded-lg border border-neutral-200 p-2.5">
-          {PERMISSION_KEYS.map((key) => {
-            const checked = value.includes(key);
-            return (
-              <label
-                key={key}
-                className="flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-neutral-50"
+      <div
+        className={cn(
+          'grid grid-cols-1 sm:grid-cols-2 gap-1.5 rounded-lg border border-neutral-200 p-2.5 transition-opacity',
+          followingPreset && 'opacity-60'
+        )}
+      >
+        {PERMISSION_KEYS.map((key) => {
+          const checked = value.includes(key);
+          return (
+            <label
+              key={key}
+              className="flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-neutral-50"
+            >
+              <span
+                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                  checked ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-300'
+                }`}
               >
-                <span
-                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                    checked ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-300'
-                  }`}
-                >
-                  {checked && <Check className="h-3 w-3" />}
-                </span>
-                <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggle(key)} />
-                <span>
-                  <span className="block font-medium text-neutral-800">{PERMISSION_LABELS[key].name}</span>
-                  <span className="block text-neutral-500">{PERMISSION_LABELS[key].description}</span>
-                </span>
-              </label>
-            );
-          })}
-        </div>
-      )}
-      {preset !== 'CUSTOM' && (
-        <p className="text-[11px] text-neutral-400">
-          {preset === 'ALL' ? 'Every section except Team management.' : 'Clients, Projects, Quotes, Invoices and Payments.'}
-        </p>
-      )}
+                {checked && <Check className="h-3 w-3" />}
+              </span>
+              <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggle(key)} />
+              <span>
+                <span className="block font-medium text-neutral-800">{PERMISSION_LABELS[key].name}</span>
+                <span className="block text-neutral-500">{PERMISSION_LABELS[key].description}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
     </div>
   );
 }
