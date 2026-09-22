@@ -7,7 +7,7 @@
     },
     {
       "path": "/api/cron/keepalive",
-      "schedule": "0 3 */4 * *"
+      "schedule": "0 3 * * 0,4"
     }
   ]
 }
