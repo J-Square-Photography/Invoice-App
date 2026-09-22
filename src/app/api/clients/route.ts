@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { rankClients } from '@/lib/search-rank';
+import { composeContactName } from '@/lib/client-name';
+
+const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -56,11 +59,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { companyName, contactName, email, phone, uen, address, socials, internalNotes } = body;
+    const { companyName, contactName, salutation, firstName, lastName, email, phone, uen, address, socials, internalNotes } = body;
 
     if (typeof companyName !== 'string' || !companyName.trim()) {
       return NextResponse.json({ error: 'Client name is required' }, { status: 400 });
     }
+
+    const nameParts = { salutation: clean(salutation, 40), firstName: clean(firstName, 80), lastName: clean(lastName, 80) };
+    // The salutation/given/family boxes are the source of truth when present; a raw contactName
+    // (e.g. from an import script) is only used as a fallback so nothing forces the split.
+    const composedName = composeContactName(nameParts);
 
     // Everything except the name is optional
     const normalizedEmail = typeof email === 'string' && email.trim() ? email.toLowerCase().trim() : null;
@@ -81,7 +89,8 @@ export async function POST(request: NextRequest) {
     const client = await prisma.client.create({
       data: {
         companyName: companyName.trim(),
-        contactName: typeof contactName === 'string' ? contactName.trim() : '',
+        contactName: composedName || (typeof contactName === 'string' ? contactName.trim() : ''),
+        ...nameParts,
         email: normalizedEmail,
         phone: phone || null,
         uen: uen || null,

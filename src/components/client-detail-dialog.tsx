@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { PhoneInput } from '@/components/phone-input';
+import { SalutationNameFields, type NameFieldsValue } from '@/components/salutation-name-fields';
 import { FieldTag } from '@/components/field-tag';
 import { DeleteImpactWarning } from '@/components/delete-impact';
 import type { DeleteImpact } from '@/lib/delete-impact';
@@ -40,6 +41,9 @@ interface ClientDetail {
   id: string;
   companyName: string;
   contactName: string;
+  salutation: string | null;
+  firstName: string | null;
+  lastName: string | null;
   email: string | null;
   phone: string | null;
   uen: string | null;
@@ -52,7 +56,9 @@ interface ClientDetail {
 
 interface ClientForm {
   companyName: string;
-  contactName: string;
+  salutation: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
   uen: string;
@@ -63,7 +69,13 @@ interface ClientForm {
 
 const toForm = (c: ClientDetail): ClientForm => ({
   companyName: c.companyName || '',
-  contactName: c.contactName || '',
+  // A client saved before this feature has a printed name but no split parts recorded. Rather
+  // than guess how to split it (risking a wrongly-placed family name), the whole thing goes into
+  // Given Name and Family Name stays blank: saving with no further changes reproduces the exact
+  // same printed name, so nothing can be silently altered just by opening and saving Edit.
+  salutation: c.salutation || '',
+  firstName: c.firstName || (c.salutation || c.lastName ? '' : c.contactName || ''),
+  lastName: c.lastName || '',
   email: c.email || '',
   phone: c.phone || '',
   uen: c.uen || '',
@@ -235,10 +247,11 @@ export function ClientDetailDialog({
                     <Label htmlFor="cd-companyName">Client / Company Name <FieldTag required /></Label>
                     <Input id="cd-companyName" name="companyName" required value={form.companyName} onChange={handleFormChange} />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cd-contactName">Contact Name <FieldTag /></Label>
-                    <Input id="cd-contactName" name="contactName" value={form.contactName} onChange={handleFormChange} />
-                  </div>
+                  <SalutationNameFields
+                    idPrefix="cd"
+                    value={{ salutation: form.salutation, firstName: form.firstName, lastName: form.lastName }}
+                    onChange={(next: NameFieldsValue) => setForm((prev) => (prev ? { ...prev, ...next } : prev))}
+                  />
                   <div className="space-y-2">
                     <Label htmlFor="cd-email">Email <FieldTag /></Label>
                     <Input id="cd-email" name="email" type="email" value={form.email} onChange={handleFormChange} />

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ClientDetailDialog } from '@/components/client-detail-dialog';
 import { PhoneInput } from '@/components/phone-input';
+import { SalutationNameFields, EMPTY_NAME_FIELDS, type NameFieldsValue } from '@/components/salutation-name-fields';
 import { FieldTag } from '@/components/field-tag';
 import { missingClientInfo } from '@/lib/client-info';
 import { Button } from '@/components/ui/button';
@@ -62,7 +63,6 @@ export default function ClientsPage() {
   // Form state
   const [formData, setFormData] = useState({
     companyName: '',
-    contactName: '',
     email: '',
     phone: '',
     uen: '',
@@ -70,6 +70,7 @@ export default function ClientsPage() {
     socials: '',
     internalNotes: ''
   });
+  const [nameFields, setNameFields] = useState<NameFieldsValue>(EMPTY_NAME_FIELDS);
 
   const { toast } = useToast();
 
@@ -124,7 +125,7 @@ export default function ClientsPage() {
       const res = await fetch('/api/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, ...nameFields }),
       });
 
       if (!res.ok) {
@@ -140,7 +141,6 @@ export default function ClientsPage() {
       setIsDialogOpen(false);
       setFormData({
         companyName: '',
-        contactName: '',
         email: '',
         phone: '',
         uen: '',
@@ -148,6 +148,7 @@ export default function ClientsPage() {
         socials: '',
         internalNotes: ''
       });
+      setNameFields(EMPTY_NAME_FIELDS);
       fetchClients(search);
     } catch (error) {
       toast({
@@ -304,10 +305,7 @@ export default function ClientsPage() {
                 <Label htmlFor="companyName">Client / Company Name <FieldTag required /></Label>
                 <Input id="companyName" name="companyName" required value={formData.companyName} onChange={handleInputChange} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="contactName">Contact Name <FieldTag /></Label>
-                <Input id="contactName" name="contactName" value={formData.contactName} onChange={handleInputChange} />
-              </div>
+              <SalutationNameFields idPrefix="new" value={nameFields} onChange={setNameFields} />
               <div className="space-y-2">
                 <Label htmlFor="email">Email <FieldTag /></Label>
                 <Input id="email" name="email" type="email" value={formData.email} onChange={handleInputChange} />

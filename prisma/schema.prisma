@@ -44,7 +44,15 @@ model CompanySettings {
 model Client {
   id            String    @id @default(uuid())
   companyName   String
+  // The printable name (e.g. "Mr Wei Ming Tan"), composed server-side from the fields below
+  // whenever they are provided (see src/lib/client-name.ts). Kept as a plain column, rather than
+  // computed on every read, so every existing consumer (invoice/contract PDFs, search, the client
+  // list) keeps working unchanged. Older rows created before this split may hold a name here with
+  // no matching salutation/firstName/lastName recorded.
   contactName   String
+  salutation    String?
+  firstName     String?
+  lastName      String?
   // Optional: a client can be created with just a name and filled in later (multiple NULLs are allowed by the unique index)
   email         String?   @unique
   phone         String?

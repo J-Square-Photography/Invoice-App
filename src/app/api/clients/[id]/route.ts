@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { deleteImpact } from '@/lib/delete-impact';
+import { composeContactName } from '@/lib/client-name';
+
+const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 
 export async function GET(
   request: NextRequest,
@@ -53,7 +56,7 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { companyName, contactName, email, phone, uen, address, socials, internalNotes } = body;
+    const { companyName, contactName, salutation, firstName, lastName, email, phone, uen, address, socials, internalNotes } = body;
 
     // If email is changing, check uniqueness
     if (typeof email === 'string' && email.trim()) {
@@ -76,7 +79,24 @@ export async function PATCH(
       }
       updateData.companyName = companyName.trim();
     }
-    if (contactName !== undefined) updateData.contactName = typeof contactName === 'string' ? contactName.trim() : '';
+    // The salutation/given/family boxes are the source of truth for the printed name whenever the
+    // caller touches any of them. A raw contactName sent on its own (e.g. an import script) still
+    // works and takes precedence, so nothing here can silently overwrite it with a blank name.
+    const touchesNameParts = salutation !== undefined || firstName !== undefined || lastName !== undefined;
+    if (salutation !== undefined) updateData.salutation = clean(salutation, 40);
+    if (firstName !== undefined) updateData.firstName = clean(firstName, 80);
+    if (lastName !== undefined) updateData.lastName = clean(lastName, 80);
+    if (contactName !== undefined) {
+      updateData.contactName = typeof contactName === 'string' ? contactName.trim() : '';
+    } else if (touchesNameParts) {
+      const current = await prisma.client.findUnique({ where: { id }, select: { salutation: true, firstName: true, lastName: true } });
+      if (!current) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+      updateData.contactName = composeContactName({
+        salutation: salutation !== undefined ? (updateData.salutation as string | null) : current.salutation,
+        firstName: firstName !== undefined ? (updateData.firstName as string | null) : current.firstName,
+        lastName: lastName !== undefined ? (updateData.lastName as string | null) : current.lastName,
+      });
+    }
     if (email !== undefined) updateData.email = typeof email === 'string' && email.trim() ? email.toLowerCase().trim() : null;
     if (phone !== undefined) updateData.phone = phone || null;
     if (uen !== undefined) updateData.uen = uen || null;

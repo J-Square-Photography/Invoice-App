@@ -87,11 +87,16 @@ export function hexToHsl(hex: string): { h: number; s: number; l: number } {
  */
 export function generateNeutrals(hue: number, tint: number, mode: Mode): Neutrals {
   const s = Math.max(0, Math.min(30, tint));
-  // saturation each step keeps: strongest in the mid-tones, calmer at the very light/dark ends
-  const light: Array<[number, number]> = [[95, 0.85], [91, 0.9], [85, 0.9], [76, 0.85], [55, 0.7], [41, 0.7], [33, 0.75], [25, 0.8], [18, 0.85], [12, 0.9], [7, 0.9]];
+  // saturation each step keeps: strongest in the mid-tones, calmer at the very light/dark ends.
+  // The page (50) and card (white) steps sit at a high lightness by design, so their multipliers
+  // are boosted well above 1 to compensate: HSL chroma is capped at 2*min(L,1-L), which collapses
+  // toward zero as L approaches 100% — at L=98.5% even 100% saturation is barely visible. Without
+  // this compensation every pale/dark-brand-neutral generated palette looks the same washed-out
+  // near-white or near-black, whatever hue is fed in.
+  const light: Array<[number, number]> = [[92.5, 1.5], [91, 0.9], [85, 0.9], [76, 0.85], [55, 0.7], [41, 0.7], [33, 0.75], [25, 0.8], [18, 0.85], [12, 0.9], [7, 0.9]];
   const dark: Array<[number, number]> = [[7.5, 0.9], [15, 0.85], [21, 0.8], [29, 0.75], [52, 0.6], [67, 0.6], [76, 0.65], [84, 0.7], [91, 0.7], [96, 0.7], [99, 0.6]];
   const ramp = mode === 'light' ? light : dark;
-  const card = mode === 'light' ? hslToHex(hue, s * 0.7, 98.5) : hslToHex(hue, s * 0.85, 11);
+  const card = mode === 'light' ? hslToHex(hue, s * 2, 96.5) : hslToHex(hue, s * 0.85, 11);
   return { white: card, scale: Object.fromEntries(STEPS.map((step, i) => [step, hslToHex(hue, s * ramp[i][1], ramp[i][0])])) as Record<Step, string> };
 }
 
@@ -103,9 +108,9 @@ const generated = (hue: number, tint: number, accents: AccentRecipe): PaletteCol
 
 // Neutral steps in order: 50 100 200 300 400 500 600 700 800 900 950
 export const PALETTE_COLOURS: Record<string, PaletteColours> = {
-  rose: generated(350, 22, { emerald: [150, 28], red: [352, 46], blue: [215, 36], amber: [34, 55] }),
-  ocean: generated(195, 26, { emerald: [165, 32], red: [5, 44], blue: [200, 50], amber: [38, 54] }),
-  lavender: generated(262, 22, { emerald: [155, 28], red: [345, 44], blue: [235, 42], amber: [36, 52] }),
+  rose: generated(350, 26, { emerald: [150, 28], red: [352, 46], blue: [215, 36], amber: [34, 55] }),
+  ocean: generated(195, 28, { emerald: [165, 32], red: [5, 44], blue: [200, 50], amber: [38, 54] }),
+  lavender: generated(262, 24, { emerald: [155, 28], red: [345, 44], blue: [235, 42], amber: [36, 52] }),
   slate: generated(215, 8, { emerald: [152, 30], red: [4, 44], blue: [214, 44], amber: [38, 54] }),
   cozy: {
     light: n('#fbf8f2', ['#f3eee4', '#ebe4d6', '#ddd3c0', '#c9bda6', '#9b8e79', '#6f6555', '#5a5142', '#463e32', '#322b22', '#211c16', '#14110d']),
@@ -141,8 +146,13 @@ const LIGHT_S: Record<Step, number> = { 50: 0.55, 100: 0.65, 200: 0.75, 300: 0.8
 const DARK_L: Record<Step, number> = { 50: 11, 100: 15, 200: 22, 300: 30, 400: 42, 500: 62, 600: 70, 700: 78, 800: 85, 900: 91, 950: 96 };
 const DARK_S: Record<Step, number> = { 50: 0.6, 100: 0.65, 200: 0.7, 300: 0.75, 400: 0.8, 500: 0.95, 600: 0.95, 700: 0.9, 800: 0.85, 900: 0.8, 950: 0.7 };
 
-/** A full 50-950 scale for one accent colour, with the text-like steps nudged until they read clearly. */
-export function accentScale(hue: number, sat: number, mode: Mode, card: string): Record<Step, string> {
+/**
+ * A full 50-950 scale for one accent colour, with the text-like steps nudged until they read
+ * clearly. Checked against both the card and the (slightly darker/more tinted) page background,
+ * since these colours are used as text on both — nudging against the card alone could leave a
+ * step a hair under the requirement on the page.
+ */
+export function accentScale(hue: number, sat: number, mode: Mode, card: string, page?: string): Record<Step, string> {
   const L = mode === 'light' ? LIGHT_L : DARK_L;
   const S = mode === 'light' ? LIGHT_S : DARK_S;
   const out = {} as Record<Step, string>;
@@ -151,7 +161,8 @@ export function accentScale(hue: number, sat: number, mode: Mode, card: string):
     let hex = hslToHex(hue, sat * S[step], l);
     // text steps must read on the card colour: darker in light mode, lighter in dark mode
     const needed = step === 500 ? 4.5 : step >= 600 && step <= 900 ? 5 : 0;
-    while (needed && contrast(hex, card) < needed && l > 4 && l < 96) {
+    const worst = () => Math.min(contrast(hex, card), page ? contrast(hex, page) : Infinity);
+    while (needed && worst() < needed && l > 4 && l < 96) {
       l += mode === 'light' ? -1 : 1;
       hex = hslToHex(hue, sat * S[step], l);
     }
@@ -173,7 +184,7 @@ function varsFor(p: PaletteColours, mode: Mode): Record<string, string> {
   for (const s of STEPS) vars[`--color-neutral-${s}`] = neutrals.scale[s];
   for (const name of ACCENT_NAMES) {
     const [hue, sat] = p.accents[name];
-    const scale = accentScale(hue, sat, mode, neutrals.white);
+    const scale = accentScale(hue, sat, mode, neutrals.white, neutrals.scale[50]);
     for (const s of STEPS) vars[`--color-${name}-${s}`] = scale[s];
     // green is only used as a synonym of emerald
     if (name === 'emerald') for (const s of STEPS) vars[`--color-green-${s}`] = scale[s];
