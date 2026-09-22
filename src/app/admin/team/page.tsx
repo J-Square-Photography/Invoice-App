@@ -56,6 +56,14 @@ function PermissionsEditor({
   value: PermissionKey[];
   onChange: (next: PermissionKey[]) => void;
 }) {
+  // Which button is highlighted is its own state, not recomputed from `value` on every render:
+  // otherwise clicking "Custom" while the list already happens to equal (say) Essentials would be
+  // a no-op, since `value` wouldn't change and the derived preset would just snap right back.
+  // Seeded from the incoming value so re-opening Edit still shows the right button selected; the
+  // parent remounts this component (via `key`) whenever it switches which account is being edited,
+  // so this seed re-runs for each one instead of carrying over stale state.
+  const [preset, setPreset] = useState<Preset>(() => presetFor(value));
+
   if (role === 'SUPER_ADMIN') {
     return (
       <p className="text-xs text-neutral-500 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2">
@@ -64,8 +72,8 @@ function PermissionsEditor({
     );
   }
 
-  const preset = presetFor(value);
   const choosePreset = (p: Preset) => {
+    setPreset(p);
     if (p === 'ALL') onChange([...ALL_PERMISSIONS]);
     else if (p === 'ESSENTIALS') onChange([...ESSENTIALS_PERMISSIONS]);
     // CUSTOM: leave the current selection as-is, just switch the checklist into view
