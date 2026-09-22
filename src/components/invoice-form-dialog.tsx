@@ -28,6 +28,7 @@ import {
 import { PHOTOBOOTH_PACKAGES } from '@/lib/photobooth-presets';
 import { SERVICE_CATALOGUE, findServiceItem } from '@/lib/service-presets';
 import { tagLabel } from '@/lib/service-tags';
+import { singaporeDateParts } from '@/lib/time';
 
 interface DiscountRow {
   name: string;
@@ -71,13 +72,15 @@ export interface EditableInvoice {
   discounts?: unknown;
 }
 
+// For quotations the form receives an invoice-shaped record: invoiceNumber is the quote number
+// and dueDate is the valid-until date.
 const DEFAULT_GST_RATE = 9;
 const DEFAULT_ITEM: LineItemInput = { description: 'Photography / Videography Services', quantity: 1, amount: 0 };
 
-const defaultDueDate = () => {
-  const d = new Date();
-  d.setDate(d.getDate() + 14);
-  return d.toISOString().split('T')[0];
+// N days from today in Singapore (the browser's UTC date would be a day behind early in the morning)
+const defaultDueDate = (days = 14) => {
+  const { year, month, day } = singaporeDateParts();
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().split('T')[0];
 };
 
 export function InvoiceFormDialog({
@@ -86,6 +89,7 @@ export function InvoiceFormDialog({
   invoice,
   onSaved,
   defaultProjectId,
+  kind = 'invoice',
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -94,9 +98,14 @@ export function InvoiceFormDialog({
   onSaved: () => void;
   /** When creating, start with this project already chosen. */
   defaultProjectId?: string;
+  /** 'quote' reuses this form for quotations: a valid-until date, no payment method. */
+  kind?: 'invoice' | 'quote';
 }) {
   const { toast } = useToast();
   const isEdit = !!invoice;
+  const isQuote = kind === 'quote';
+  const noun = isQuote ? 'quotation' : 'invoice';
+  const validDays = 30;
 
   const [saving, setSaving] = useState(false);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -105,7 +114,7 @@ export function InvoiceFormDialog({
   const [selectedProjectId, setSelectedProjectId] = useState('');
   // Presets are limited to the project's service tags unless this is switched on
   const [showAllServices, setShowAllServices] = useState(false);
-  const [dueDate, setDueDate] = useState(defaultDueDate);
+  const [dueDate, setDueDate] = useState(() => defaultDueDate(kind === 'quote' ? 30 : 14));
   const [paymentMethod, setPaymentMethod] = useState('PAYNOW_QR');
   const [isGstApplied, setIsGstApplied] = useState(true);
   const [gstRate, setGstRate] = useState(DEFAULT_GST_RATE);
@@ -158,7 +167,7 @@ export function InvoiceFormDialog({
       );
     } else {
       setSelectedProjectId(defaultProjectId ?? '');
-      setDueDate(defaultDueDate());
+      setDueDate(defaultDueDate(isQuote ? validDays : 14));
       setPaymentMethod('PAYNOW_QR');
       setIsGstApplied(true);
       setGstRate(DEFAULT_GST_RATE);
@@ -183,8 +192,10 @@ export function InvoiceFormDialog({
           const data = await res.json();
           const list: ProjectOption[] = data.projects || [];
           setProjects(list);
-          if (!invoice && list.length > 0) {
-            setSelectedProjectId(defaultProjectId && list.some((p) => p.id === defaultProjectId) ? defaultProjectId : list[0].id);
+          // A new document starts on the project it was opened from, or with none chosen: guessing the
+          // newest project made it easy to invoice the wrong client without noticing
+          if (!invoice) {
+            setSelectedProjectId(defaultProjectId && list.some((p) => p.id === defaultProjectId) ? defaultProjectId : '');
           }
         }
       } catch {
@@ -285,20 +296,23 @@ export function InvoiceFormDialog({
     setSaving(true);
     try {
       let res: Response;
+      const base = isQuote ? '/api/quotes' : '/api/invoices';
+      // The two differ only in the date field (valid-until vs due) and the payment method
+      const dateAndMethod = isQuote ? { validUntil: dueDate } : { dueDate, paymentMethod };
       if (isEdit && invoice) {
         const body = lockAmounts
-          ? { dueDate, paymentMethod, notes }
-          : { projectId: selectedProjectId, dueDate, paymentMethod, isGstApplied, gstRate, notes, items, discounts: discountInputs };
-        res = await fetch(`/api/invoices/${invoice.id}`, {
+          ? { ...dateAndMethod, notes }
+          : { projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, items, discounts: discountInputs };
+        res = await fetch(`${base}/${invoice.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
       } else {
-        res = await fetch('/api/invoices', {
+        res = await fetch(base, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: selectedProjectId, dueDate, paymentMethod, isGstApplied, gstRate, notes, items, discounts: discountInputs }),
+          body: JSON.stringify({ projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, items, discounts: discountInputs }),
         });
       }
 
@@ -306,7 +320,7 @@ export function InvoiceFormDialog({
       if (!res.ok) {
         toast({
           title: 'Error',
-          description: data.error || `Failed to ${isEdit ? 'update' : 'create'} invoice`,
+          description: data.error || `Failed to ${isEdit ? 'update' : 'create'} ${noun}`,
           variant: 'destructive',
         });
         return;
@@ -315,8 +329,8 @@ export function InvoiceFormDialog({
       toast({
         title: 'Success',
         description: isEdit
-          ? `Invoice ${invoice?.invoiceNumber} updated.`
-          : `Invoice ${data.invoice.invoiceNumber} created!`,
+          ? `${isQuote ? 'Quotation' : 'Invoice'} ${invoice?.invoiceNumber} updated.`
+          : `${isQuote ? 'Quotation' : 'Invoice'} ${(isQuote ? data.quote?.quoteNumber : data.invoice?.invoiceNumber) ?? ''} created!`,
       });
       onOpenChange(false);
       onSaved();
@@ -333,11 +347,15 @@ export function InvoiceFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? `Edit Invoice ${invoice?.invoiceNumber}` : 'Create New Invoice'}</DialogTitle>
+          <DialogTitle>{isEdit ? `Edit ${isQuote ? 'Quotation' : 'Invoice'} ${invoice?.invoiceNumber}` : isQuote ? 'Create New Quotation' : 'Create New Invoice'}</DialogTitle>
           <DialogDescription>
-            {isEdit
-              ? 'Correct the details of this invoice. Totals and the outstanding balance are recalculated automatically.'
-              : 'Draft an invoice with Singapore EMVCo PayNow SGQR code and 9% GST.'}
+            {isQuote
+              ? isEdit
+                ? 'Change what is being quoted. Totals are recalculated automatically.'
+                : 'Price a job before it is confirmed. When the client says yes, convert it to an invoice in one click.'
+              : isEdit
+                ? 'Correct the details of this invoice. Totals and the outstanding balance are recalculated automatically.'
+                : 'Draft an invoice with Singapore EMVCo PayNow SGQR code and 9% GST.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -364,7 +382,7 @@ export function InvoiceFormDialog({
               </div>
             ) : projects.length === 0 ? (
               <p className="text-sm text-amber-600">
-                No projects available. Please create a project first before generating an invoice.
+                No projects available. Please create a project first before generating a {noun}.
               </p>
             ) : (
               <Select
@@ -374,6 +392,9 @@ export function InvoiceFormDialog({
                 disabled={lockAmounts}
                 required
               >
+                <option value="" disabled>
+                  Choose a project...
+                </option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.client.companyName} — {p.title}
@@ -386,7 +407,7 @@ export function InvoiceFormDialog({
           {/* Dates & Payment Method */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="inv-dueDate">Payment Due Date *</Label>
+              <Label htmlFor="inv-dueDate">{isQuote ? 'Valid Until *' : 'Payment Due Date *'}</Label>
               <Input
                 id="inv-dueDate"
                 type="date"
@@ -396,6 +417,7 @@ export function InvoiceFormDialog({
               />
             </div>
 
+            {!isQuote && (
             <div className="space-y-2">
               <Label htmlFor="inv-paymentMethod">Primary Payment Method</Label>
               <Select
@@ -411,6 +433,7 @@ export function InvoiceFormDialog({
                 <option value="BANK_TRANSFER">Bank Wire Transfer</option>
               </Select>
             </div>
+            )}
           </div>
 
           {/* Quick adds (yellow) + service price dropdowns (normal) */}
@@ -510,7 +533,7 @@ export function InvoiceFormDialog({
           <div className="space-y-3 pt-2">
             <div className="flex justify-between items-center">
               <div>
-                <Label className="text-sm font-semibold">Invoice Line Items</Label>
+                <Label className="text-sm font-semibold">{isQuote ? 'Quotation Line Items' : 'Invoice Line Items'}</Label>
                 <p className="text-[11px] text-neutral-500">Add or edit items below</p>
               </div>
               {!lockAmounts && (
@@ -627,7 +650,7 @@ export function InvoiceFormDialog({
 
             {discounts.length === 0 ? (
               <p className="rounded-md border border-dashed border-neutral-300 px-3 py-2.5 text-xs text-neutral-500">
-                No discounts on this invoice.{!lockAmounts && ' Add one to give the client a reduction.'}
+                No discounts on this {noun}.{!lockAmounts && ' Add one to give the client a reduction.'}
               </p>
             ) : (
               <div className="space-y-2">
@@ -798,7 +821,7 @@ export function InvoiceFormDialog({
 
           {/* Notes */}
           <div className="space-y-2">
-            <Label htmlFor="inv-notes">Notes / Payment Terms (Optional)</Label>
+            <Label htmlFor="inv-notes">{isQuote ? 'Notes / Terms (Optional)' : 'Notes / Payment Terms (Optional)'}</Label>
             <Textarea
               id="inv-notes"
               value={notes}
@@ -814,7 +837,7 @@ export function InvoiceFormDialog({
             </Button>
             <Button type="submit" disabled={saving || projects.length === 0}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isEdit ? 'Save Changes' : 'Generate Invoice'}
+              {isEdit ? 'Save Changes' : isQuote ? 'Create Quotation' : 'Generate Invoice'}
             </Button>
           </DialogFooter>
         </form>

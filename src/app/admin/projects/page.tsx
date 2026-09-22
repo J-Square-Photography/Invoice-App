@@ -17,6 +17,10 @@ import { cn } from '@/lib/utils';
 import { PIPELINE_STATUS_LABELS } from '@/lib/constants';
 import { SERVICE_TAGS } from '@/lib/service-tags';
 import { ServiceTagPicker, ServiceTagBadges } from '@/components/service-tag-picker';
+import { SortSelect, PeriodSelect, useSavedChoice } from '@/components/sort-filter';
+import { byDate, byNumber, byText, inPeriod, sortItems, PERIODS, type SortChoice } from '@/lib/sorting';
+import { byPipelineOrder } from '@/lib/project-order';
+import { formatDate } from '@/lib/utils';
 
 type Project = {
   id: string;
@@ -26,9 +30,22 @@ type Project = {
   serviceTags?: string[];
   pipelineStatus: string;
   shootDate: string | null;
+  createdAt?: string;
   client: { companyName: string };
   _count?: { invoices: number };
 };
+
+const SORT_CHOICES: SortChoice<Project>[] = [
+  { value: 'pipeline', label: 'Status: Open Jobs First (Default)', compare: byPipelineOrder<Project>() },
+  { value: 'newest', label: 'Date Added: Newest to Oldest', compare: byDate((p) => p.createdAt, 'desc') },
+  { value: 'oldest', label: 'Date Added: Oldest to Newest', compare: byDate((p) => p.createdAt, 'asc') },
+  { value: 'shoot-soon', label: 'Shoot Date: Soonest to Latest', compare: byDate((p) => p.shootDate, 'asc') },
+  { value: 'shoot-late', label: 'Shoot Date: Latest to Soonest', compare: byDate((p) => p.shootDate, 'desc') },
+  { value: 'title-az', label: 'Project Title: A to Z', compare: byText((p) => p.title) },
+  { value: 'title-za', label: 'Project Title: Z to A', compare: byText((p) => p.title, 'desc') },
+  { value: 'client-az', label: 'Client Name: A to Z', compare: byText((p) => p.client?.companyName) },
+  { value: 'invoices-most', label: 'Number of Invoices: Most to Fewest', compare: byNumber((p) => p._count?.invoices ?? 0, 'desc') },
+];
 
 export default function ProjectsListPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -36,6 +53,8 @@ export default function ProjectsListPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('ALL');
+  const [sort, setSort] = useSavedChoice('projects-sort', 'pipeline', SORT_CHOICES.map((c) => c.value));
+  const [addedPeriod, setAddedPeriod] = useSavedChoice('projects-period', 'ALL', PERIODS.map((p) => p.value));
 
   // Dialog & Form State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -188,6 +207,8 @@ export default function ProjectsListPage() {
     }
   };
 
+  const visibleProjects = sortItems(projects.filter((p) => inPeriod(p.createdAt, addedPeriod)), SORT_CHOICES, sort);
+
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'INQUIRY': return 'secondary';
@@ -210,8 +231,8 @@ export default function ProjectsListPage() {
         </Button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 p-4 bg-white border rounded-lg shadow-sm">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 p-4 bg-white border rounded-lg shadow-sm">
+        <div className="relative flex-1 min-w-[14rem]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-neutral-500" />
           <Input
             placeholder="Search projects or clients..."
@@ -224,7 +245,7 @@ export default function ProjectsListPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="flex h-10 w-full sm:w-48 items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
+          className="flex h-9 w-full sm:w-44 items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
         >
           <option value="ALL">All Statuses</option>
           {Object.entries(PIPELINE_STATUS_LABELS || {}).map(([key, label]) => (
@@ -232,10 +253,12 @@ export default function ProjectsListPage() {
           ))}
         </select>
 
+        <SortSelect value={sort} onChange={setSort} options={SORT_CHOICES} />
+        <PeriodSelect value={addedPeriod} onChange={setAddedPeriod} />
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
-          className="flex h-10 w-full sm:w-48 items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
+          className="flex h-9 w-full sm:w-44 items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
         >
           <option value="ALL">All Services</option>
           {SERVICE_TAGS.map((tag) => (
@@ -265,14 +288,14 @@ export default function ProjectsListPage() {
                     Loading projects...
                   </td>
                 </tr>
-              ) : projects.length === 0 ? (
+              ) : visibleProjects.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-neutral-500">
                     No projects found.
                   </td>
                 </tr>
               ) : (
-                projects.map((project) => (
+                visibleProjects.map((project) => (
                   <tr key={project.id} className="border-b hover:bg-neutral-50">
                     <td className="px-6 py-4 font-medium">
                       <button
@@ -297,7 +320,7 @@ export default function ProjectsListPage() {
                       </Badge>
                     </td>
                     <td className="px-6 py-4 text-neutral-500">
-                      {project.shootDate ? new Date(project.shootDate).toLocaleDateString() : 'TBD'}
+                      {project.shootDate ? formatDate(project.shootDate) : 'TBD'}
                     </td>
                     <td className="px-6 py-4 text-neutral-500">
                       {project._count?.invoices || 0}

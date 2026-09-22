@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { getCurrentUser } from '@/lib/auth';
 import { ROLES } from '@/lib/constants';
 import { getCompanySettings, toPublicPaymentConfig, SETTINGS_ROW_ID } from '@/lib/company-settings';
+import { usesSamplePaymentDetails } from '@/lib/payment-config';
+import { makeSnapshot, snapshotForDb } from '@/lib/payment-snapshot';
 
 // A static QR is stored as a data URL. PNG or JPEG only (what the PDF generator can embed).
 const STATIC_QR_PATTERN = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+=*$/;
@@ -43,6 +46,7 @@ export async function GET() {
   return NextResponse.json({
     settings: toPublicPaymentConfig(settings),
     hasStaticQr: !!settings.staticQrDataUrl,
+    usingSampleDetails: usesSamplePaymentDetails(settings),
     // The image itself is only needed on the Settings page
     staticQrDataUrl: user.role === ROLES.SUPER_ADMIN ? settings.staticQrDataUrl : undefined,
     updatedAt: row?.updatedAt ?? null,
@@ -103,6 +107,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const updatedBy = user.email;
+    const wasSample = usesSamplePaymentDetails(await getCompanySettings());
     await prisma.companySettings.upsert({
       where: { id: SETTINGS_ROW_ID },
       create: { id: SETTINGS_ROW_ID, ...data, updatedBy },
@@ -112,9 +117,23 @@ export async function PUT(request: NextRequest) {
     console.warn(`Company settings changed by ${updatedBy}: ${Object.keys(data).join(', ')}`);
 
     const settings = await getCompanySettings();
+
+    // The moment real details replace the sample ones, invoices that were already issued while the
+    // samples were in place get the real details frozen in (they were never frozen with the samples)
+    if (wasSample && !usesSamplePaymentDetails(settings)) {
+      const issued = await prisma.invoice.findMany({
+        where: { status: { not: 'DRAFT' }, paymentSnapshot: { equals: Prisma.DbNull } },
+        select: { id: true, paymentMethod: true },
+      });
+      for (const inv of issued) {
+        await prisma.invoice.update({ where: { id: inv.id }, data: { paymentSnapshot: snapshotForDb(makeSnapshot(settings, inv.paymentMethod)) } });
+      }
+    }
+
     return NextResponse.json({
       settings: toPublicPaymentConfig(settings),
       hasStaticQr: !!settings.staticQrDataUrl,
+      usingSampleDetails: usesSamplePaymentDetails(settings),
       staticQrDataUrl: settings.staticQrDataUrl,
     });
   } catch (error) {

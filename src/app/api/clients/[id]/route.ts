@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { deleteImpact } from '@/lib/delete-impact';
 
 export async function GET(
   request: NextRequest,
@@ -27,7 +28,18 @@ export async function GET(
     return NextResponse.json({ error: 'Client not found' }, { status: 404 });
   }
 
-  return NextResponse.json({ client });
+  // What this client has been billed and has paid (issued invoices only: no drafts, no voids)
+  const billed = await prisma.invoice.aggregate({
+    where: { project: { clientId: id }, status: { in: ['SENT', 'PARTIAL', 'PAID'] } },
+    _sum: { totalAmount: true, paidAmount: true, balanceDue: true },
+  });
+  const financials = {
+    invoiced: Number(billed._sum.totalAmount ?? 0),
+    paid: Number(billed._sum.paidAmount ?? 0),
+    outstanding: Number(billed._sum.balanceDue ?? 0),
+  };
+
+  return NextResponse.json({ client, impact: await deleteImpact({ clientId: id }), financials });
 }
 
 export async function PATCH(
@@ -44,7 +56,7 @@ export async function PATCH(
     const { companyName, contactName, email, phone, uen, address, socials, internalNotes } = body;
 
     // If email is changing, check uniqueness
-    if (email) {
+    if (typeof email === 'string' && email.trim()) {
       const normalizedEmail = email.toLowerCase().trim();
       const existing = await prisma.client.findFirst({
         where: { email: normalizedEmail, NOT: { id } },
@@ -58,9 +70,14 @@ export async function PATCH(
     }
 
     const updateData: Record<string, unknown> = {};
-    if (companyName !== undefined) updateData.companyName = companyName;
-    if (contactName !== undefined) updateData.contactName = contactName;
-    if (email !== undefined) updateData.email = email.toLowerCase().trim();
+    if (companyName !== undefined) {
+      if (typeof companyName !== 'string' || !companyName.trim()) {
+        return NextResponse.json({ error: 'Client name is required' }, { status: 400 });
+      }
+      updateData.companyName = companyName.trim();
+    }
+    if (contactName !== undefined) updateData.contactName = typeof contactName === 'string' ? contactName.trim() : '';
+    if (email !== undefined) updateData.email = typeof email === 'string' && email.trim() ? email.toLowerCase().trim() : null;
     if (phone !== undefined) updateData.phone = phone || null;
     if (uen !== undefined) updateData.uen = uen || null;
     if (address !== undefined) updateData.address = address ? String(address).trim().slice(0, 300) || null : null;

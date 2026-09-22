@@ -38,6 +38,19 @@ function createPrismaClient() {
         unitPrice: { needs: { unitPrice: true }, compute: (item) => Number(item.unitPrice) },
         amount: { needs: { amount: true }, compute: (item) => Number(item.amount) },
       },
+      quote: {
+        subtotal: { needs: { subtotal: true }, compute: (q) => Number(q.subtotal) },
+        discountAmount: { needs: { discountAmount: true }, compute: (q) => Number(q.discountAmount) },
+        gstAmount: { needs: { gstAmount: true }, compute: (q) => Number(q.gstAmount) },
+        totalAmount: { needs: { totalAmount: true }, compute: (q) => Number(q.totalAmount) },
+      },
+      quoteItem: {
+        unitPrice: { needs: { unitPrice: true }, compute: (item) => Number(item.unitPrice) },
+        amount: { needs: { amount: true }, compute: (item) => Number(item.amount) },
+      },
+      paymentReversal: {
+        amountPaid: { needs: { amountPaid: true }, compute: (r) => Number(r.amountPaid) },
+      },
       paymentLog: {
         amountPaid: { needs: { amountPaid: true }, compute: (log) => Number(log.amountPaid) },
       },

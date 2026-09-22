@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
         { companyName: { contains: q, mode: 'insensitive' } },
         { contactName: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
+        { phone: { contains: q, mode: 'insensitive' } },
       ],
     } : undefined,
     include: {
@@ -57,30 +58,30 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { companyName, contactName, email, phone, uen, address, socials, internalNotes } = body;
 
-    if (!companyName || !contactName || !email) {
-      return NextResponse.json(
-        { error: 'Company name, contact name, and email are required' },
-        { status: 400 }
-      );
+    if (typeof companyName !== 'string' || !companyName.trim()) {
+      return NextResponse.json({ error: 'Client name is required' }, { status: 400 });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    // Everything except the name is optional
+    const normalizedEmail = typeof email === 'string' && email.trim() ? email.toLowerCase().trim() : null;
 
-    const existing = await prisma.client.findUnique({
-      where: { email: normalizedEmail },
-    });
+    if (normalizedEmail) {
+      const existing = await prisma.client.findUnique({
+        where: { email: normalizedEmail },
+      });
 
-    if (existing) {
-      return NextResponse.json(
-        { error: 'A client with this email already exists' },
-        { status: 409 }
-      );
+      if (existing) {
+        return NextResponse.json(
+          { error: 'A client with this email already exists' },
+          { status: 409 }
+        );
+      }
     }
 
     const client = await prisma.client.create({
       data: {
-        companyName,
-        contactName,
+        companyName: companyName.trim(),
+        contactName: typeof contactName === 'string' ? contactName.trim() : '',
         email: normalizedEmail,
         phone: phone || null,
         uen: uen || null,

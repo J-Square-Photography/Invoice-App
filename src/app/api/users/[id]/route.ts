@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getCurrentUser, hashPassword } from '@/lib/auth';
+import { getCurrentUser, hashPassword, invalidateUserCache } from '@/lib/auth';
 import { ROLES } from '@/lib/constants';
 
 export async function PATCH(
@@ -23,8 +23,22 @@ export async function PATCH(
     const body = await request.json();
     const { name, email, role, isActive, password } = body;
 
+    // Nobody can lock themselves out: no deactivating or demoting your own account
+    if (id === currentUser.userId && (isActive === false || (role !== undefined && role !== ROLES.SUPER_ADMIN))) {
+      return NextResponse.json(
+        { error: 'You cannot deactivate or demote your own account. Ask another Developer to do it.' },
+        { status: 400 }
+      );
+    }
+    if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+      return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 });
+    }
+    if (isActive !== undefined && typeof isActive !== 'boolean') {
+      return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+    }
+
     const updateData: Record<string, unknown> = {};
-    if (name !== undefined) updateData.name = name;
+    if (name !== undefined) updateData.name = name.trim();
 
     if (email) {
       const normalizedEmail = email.toLowerCase().trim();
@@ -64,6 +78,7 @@ export async function PATCH(
       },
     });
 
+    invalidateUserCache(id);
     return NextResponse.json({ user });
   } catch (error) {
     console.error('Update user error:', error);
@@ -114,6 +129,7 @@ export async function DELETE(
           isActive: true,
         },
       });
+      invalidateUserCache(id);
       return NextResponse.json({ user, deleted: false });
     }
 
@@ -121,6 +137,7 @@ export async function DELETE(
       where: { id },
     });
 
+    invalidateUserCache(id);
     return NextResponse.json({ success: true, deleted: true });
   } catch (error) {
     console.error('Delete user error:', error);

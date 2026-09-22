@@ -156,6 +156,26 @@ describe('invoice PDF layout', () => {
     expect(text).toContain('Singapore');
   });
 
+  it('a quotation is titled Quotation, asks for a reply, and has no payment details', async () => {
+    const bytes = await generateInvoicePDF(
+      invoice({ overrides: { documentType: 'QUOTE', invoiceNumber: 'QUO-2026-0001', status: 'DRAFT', company: { ...COMPANY, gstRegNo: 'M90376150R' } } })
+    );
+    const text = pdfText(bytes);
+    expect(text).toContain('Quotation');
+    expect(text).toContain('QUO-2026-0001');
+    expect(text).toContain('HOW TO ACCEPT');
+    expect(text).toContain('QUOTED TOTAL');
+    expect(text).not.toContain('Tax Invoice');
+    expect(text).not.toContain('PAYMENT INSTRUCTIONS');
+    expect(text).not.toContain('BALANCE DUE');
+    expect(await pageCount(bytes)).toBe(1);
+  });
+
+  it('a no-charge line reads as Included instead of $0.00', async () => {
+    const text = pdfText(await generateInvoicePDF(invoice({ items: [{ description: 'Photography', amount: 500 }, { description: 'Culling and editing', amount: 0 }] })));
+    expect(text).toContain('Included');
+  });
+
   it('an invoice that does not charge GST is a plain Invoice', async () => {
     const text = pdfText(await generateInvoicePDF(invoice({ overrides: { isGstApplied: false, gstAmount: 0, company: { ...COMPANY, gstRegNo: 'M90376150R' } } })));
     expect(text).not.toContain('Tax Invoice');

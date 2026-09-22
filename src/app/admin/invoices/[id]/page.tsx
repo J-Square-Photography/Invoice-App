@@ -40,9 +40,17 @@ import {
   Loader2,
   AlertCircle,
   Trash2,
+  Mail,
+  MessageCircle,
+  Paperclip,
+  ShieldCheck,
+  ImagePlus,
 } from 'lucide-react';
 import { INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { describeDiscount } from '@/lib/invoice-calculations';
+import { useAuth } from '@/components/auth-provider';
+import { compressPaymentProof, type CompressedProof } from '@/lib/image-compress';
+import { invoiceMessage, invoiceSubject, whatsappUrl, mailtoUrl } from '@/lib/share-invoice';
 
 interface InvoiceDetail {
   id: string;
@@ -70,7 +78,7 @@ interface InvoiceDetail {
       id: string;
       companyName: string;
       contactName: string;
-      email: string;
+      email: string | null;
       phone: string | null;
       uen: string | null;
     };
@@ -90,6 +98,9 @@ interface InvoiceDetail {
     transactionRef: string | null;
     notes: string | null;
     recordedBy: string | null;
+    proofBytes: number | null;
+    verifiedAt: string | null;
+    verifiedBy: string | null;
   }>;
   contract: {
     id: string;
@@ -141,6 +152,9 @@ export default function InvoiceDetailPage() {
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [paymentMethodSelect, setPaymentMethodSelect] = useState('PAYNOW_QR');
   const [paymentRef, setPaymentRef] = useState('');
+  const [proof, setProof] = useState<CompressedProof | null>(null);
+  const [proofBusy, setProofBusy] = useState(false);
+  const { user } = useAuth();
   const [paymentNotes, setPaymentNotes] = useState('');
 
   // Copy state
@@ -204,6 +218,13 @@ export default function InvoiceDetailPage() {
       return;
     }
 
+    // Proof that the money arrived is required: a screenshot, or the bank reference (or a receipt note for cash/cheque)
+    const manual = paymentMethodSelect === 'CASH' || paymentMethodSelect === 'CHEQUE';
+    if (!proof && !paymentRef.trim() && !(manual && paymentNotes.trim())) {
+      toast({ title: 'Proof needed', description: 'Attach a screenshot of the payment, or enter the bank reference.', variant: 'destructive' });
+      return;
+    }
+
     setRecordingPayment(true);
     try {
       const res = await fetch(`/api/invoices/${id}/payments`, {
@@ -215,6 +236,7 @@ export default function InvoiceDetailPage() {
           paymentMethod: paymentMethodSelect,
           transactionRef: paymentRef,
           notes: paymentNotes,
+          proofImage: proof?.dataUrl,
         }),
       });
 
@@ -228,11 +250,29 @@ export default function InvoiceDetailPage() {
       setPaymentDialogOpen(false);
       setPaymentRef('');
       setPaymentNotes('');
+      setProof(null);
       fetchInvoice();
     } catch {
       toast({ title: 'Error', description: 'Network error occurred', variant: 'destructive' });
     } finally {
       setRecordingPayment(false);
+    }
+  };
+
+  const pickProof = async (file: File | undefined) => {
+    if (!file) return;
+    setProofBusy(true);
+    try {
+      const shrunk = await compressPaymentProof(file);
+      if (!shrunk.ok) {
+        toast({ title: 'Image too large', description: 'Even after shrinking it is too big. Try a plain screenshot.', variant: 'destructive' });
+        return;
+      }
+      setProof(shrunk);
+    } catch (e) {
+      toast({ title: 'Could not use that image', description: e instanceof Error ? e.message : 'Try another picture.', variant: 'destructive' });
+    } finally {
+      setProofBusy(false);
     }
   };
 
@@ -249,6 +289,18 @@ export default function InvoiceDetailPage() {
   };
 
   // Revert a paid invoice: clears the ledger and reopens it
+  const handleDuplicate = async () => {
+    try {
+      const res = await fetch(`/api/invoices/${id}/duplicate`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to duplicate invoice.');
+      toast({ title: 'Duplicated', description: `New draft ${data.invoice.invoiceNumber} created.` });
+      router.push(`/admin/invoices/${data.invoice.id}`);
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Failed to duplicate invoice.', variant: 'destructive' });
+    }
+  };
+
   const handleRevert = async () => {
     setReverting(true);
     try {
@@ -321,7 +373,7 @@ export default function InvoiceDetailPage() {
           </Link>
           <div>
             <div className="flex items-center gap-2.5">
-              <h1 className="text-2xl font-bold font-mono tracking-tight text-neutral-900">{invoice.invoiceNumber}</h1>
+              <h1 className="text-2xl font-bold font-mono tracking-tight text-neutral-900 whitespace-nowrap">{invoice.invoiceNumber}</h1>
               {isOverdue ? (
                 <Badge variant="destructive">Overdue</Badge>
               ) : invoice.status === 'PAID' ? (
@@ -368,6 +420,48 @@ export default function InvoiceDetailPage() {
               <Download className="mr-1.5 h-4 w-4" /> Download PDF
             </Button>
           </a>
+
+          {/* Share the invoice: opens a pre-written message; attach the downloaded PDF */}
+          {(() => {
+            const share = {
+              companyName: paymentConfig?.companyName ?? 'J Square Photography',
+              clientName: invoice.project.client.companyName,
+              contactName: invoice.project.client.contactName,
+              invoiceNumber: invoice.invoiceNumber,
+              projectTitle: invoice.project.title,
+              balanceDue: invoice.balanceDue,
+              totalAmount: invoice.totalAmount,
+              dueDate: invoice.dueDate,
+              payNowUen: paymentConfig?.uen,
+              isTaxInvoice: invoice.isGstApplied,
+            };
+            return (
+              <>
+                <a
+                  href={mailtoUrl(invoice.project.client.email, invoiceSubject(share), invoiceMessage(share))}
+                  title="Open an email with the invoice message ready to send. Attach the downloaded PDF."
+                >
+                  <Button variant="outline" className="h-9 text-xs">
+                    <Mail className="mr-1.5 h-4 w-4" /> Email
+                  </Button>
+                </a>
+                <a
+                  href={whatsappUrl(invoice.project.client.phone, invoiceMessage(share))}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open WhatsApp with the invoice message ready to send. Attach the downloaded PDF."
+                >
+                  <Button variant="outline" className="h-9 text-xs">
+                    <MessageCircle className="mr-1.5 h-4 w-4" /> WhatsApp
+                  </Button>
+                </a>
+              </>
+            );
+          })()}
+
+          <Button variant="outline" className="h-9 text-xs" onClick={handleDuplicate} title="Copy this invoice into a new draft">
+            <Copy className="mr-1.5 h-4 w-4" /> Duplicate
+          </Button>
 
           {isPaid ? (
             /* Paid invoices are locked: reverting is the only way to change them */
@@ -458,8 +552,8 @@ export default function InvoiceDetailPage() {
                     <tr key={item.id}>
                       <td className="py-3 px-4 text-neutral-900">{item.description}</td>
                       <td className="py-3 px-4 text-center text-neutral-600">{item.quantity}</td>
-                      <td className="py-3 px-4 text-right text-neutral-600">SGD ${item.unitPrice.toFixed(2)}</td>
-                      <td className="py-3 px-4 text-right font-medium text-neutral-900">SGD ${item.amount.toFixed(2)}</td>
+                      <td className="py-3 px-4 text-right text-neutral-600 whitespace-nowrap">{item.amount === 0 ? '-' : `SGD $${item.unitPrice.toFixed(2)}`}</td>
+                      <td className="py-3 px-4 text-right font-medium text-neutral-900 whitespace-nowrap">{item.amount === 0 ? 'Included' : `SGD $${item.amount.toFixed(2)}`}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -547,6 +641,7 @@ export default function InvoiceDetailPage() {
                       <th className="py-2.5 px-4">Method</th>
                       <th className="py-2.5 px-4">Reference</th>
                       <th className="py-2.5 px-4">Recorded By</th>
+                      <th className="py-2.5 px-4">Check</th>
                       <th className="py-2.5 px-4 text-right">Amount</th>
                     </tr>
                   </thead>
@@ -566,6 +661,20 @@ export default function InvoiceDetailPage() {
                         </td>
                         <td className="py-2.5 px-4 text-neutral-500 text-xs">
                           {log.recordedBy || 'System'}
+                        </td>
+                        <td className="py-2.5 px-4 text-xs whitespace-nowrap">
+                          {log.verifiedAt ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-700" title={`Verified by ${log.verifiedBy ?? 'a Developer'} on ${new Date(log.verifiedAt).toLocaleDateString('en-SG')}`}>
+                              <ShieldCheck className="h-3.5 w-3.5" /> Verified
+                            </span>
+                          ) : (
+                            <span className="text-amber-600" title="Waiting for a Developer to check the bank">Awaiting check</span>
+                          )}
+                          {log.proofBytes ? (
+                            <a href={`/api/payments/${log.id}/proof`} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-0.5 text-blue-600 hover:underline" title="Open the payment screenshot">
+                              <Paperclip className="h-3.5 w-3.5" /> Proof
+                            </a>
+                          ) : null}
                         </td>
                         <td className="py-2.5 px-4 text-right font-semibold text-emerald-600">
                           +SGD ${log.amountPaid.toFixed(2)}
@@ -851,13 +960,45 @@ export default function InvoiceDetailPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="paymentRef">Reference / Transaction ID (Optional)</Label>
+              <Label htmlFor="paymentRef">Bank Reference / Transaction ID</Label>
               <Input
                 id="paymentRef"
                 value={paymentRef}
                 onChange={(e) => setPaymentRef(e.target.value)}
                 placeholder="e.g. DBS-TXN-984210"
               />
+              <p className="text-xs text-neutral-500">
+                In your bank app, search for <button type="button" className="font-mono font-semibold text-neutral-800 underline underline-offset-2" onClick={() => copyToClipboard(invoice.invoiceNumber, 'bank')} title="Copy">{invoice.invoiceNumber}</button>: PayNow payments made from the invoice QR carry it as the reference.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Payment Screenshot</Label>
+              {proof ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 space-y-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={proof.dataUrl} alt="Payment proof preview" className="max-h-64 w-full rounded border border-neutral-200 bg-white object-contain" />
+                  <div className="flex items-center justify-between gap-2 text-xs text-emerald-900">
+                    <span>
+                      Shrunk from {(proof.originalBytes / 1024).toFixed(0)} KB to <strong>{(proof.bytes / 1024).toFixed(0)} KB</strong> ({proof.width}×{proof.height}). Check the reference number is readable.
+                    </span>
+                    <Button type="button" size="sm" variant="ghost" className="h-7 shrink-0 text-xs" onClick={() => setProof(null)}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed border-neutral-300 px-3 py-4 text-center text-sm text-neutral-600 hover:bg-neutral-50">
+                  {proofBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImagePlus className="h-5 w-5 text-neutral-400" />}
+                  <span>{proofBusy ? 'Shrinking the image...' : 'Choose a screenshot or photo'}</span>
+                  <span className="text-xs text-neutral-500">Any size is fine. It is shrunk to a small file here in your browser before saving.</span>
+                  <input type="file" accept="image/*" className="hidden" disabled={proofBusy} onChange={(e) => { pickProof(e.target.files?.[0]); e.target.value = ''; }} />
+                </label>
+              )}
+              <p className="text-xs text-neutral-500">
+                A screenshot <strong>or</strong> the bank reference is required.{' '}
+                {user?.role === 'SUPER_ADMIN' ? 'As a Developer, your entry is marked verified.' : 'A Developer will verify it against the bank.'}
+              </p>
             </div>
 
             <div className="space-y-2">

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { cleanTags, legacyTypeForTags } from '@/lib/service-tags';
+import { isPipelineStatus, parseOptionalDate, cleanTitle } from '@/lib/project-validation';
+import { deleteImpact } from '@/lib/delete-impact';
 
 export async function GET(
   request: NextRequest,
@@ -19,6 +21,9 @@ export async function GET(
       invoices: {
         orderBy: { createdAt: 'desc' },
       },
+      quotes: {
+        orderBy: { createdAt: 'desc' },
+      },
     },
   });
 
@@ -26,7 +31,7 @@ export async function GET(
     return NextResponse.json({ error: 'Project not found' }, { status: 404 });
   }
 
-  return NextResponse.json({ project });
+  return NextResponse.json({ project, impact: await deleteImpact({ projectId: id }) });
 }
 
 export async function PATCH(
@@ -43,15 +48,26 @@ export async function PATCH(
     const { title, projectType, pipelineStatus, shootDate, notes, clientId } = body;
 
     const updateData: Record<string, unknown> = {};
-    if (title !== undefined) updateData.title = title;
+    if (title !== undefined) {
+      const clean = cleanTitle(title);
+      if (!clean) return NextResponse.json({ error: 'Project title cannot be empty' }, { status: 400 });
+      updateData.title = clean;
+    }
     if (projectType !== undefined) updateData.projectType = projectType;
     if (body.serviceTags !== undefined) {
       const serviceTags = cleanTags(body.serviceTags);
       updateData.serviceTags = serviceTags;
       if (serviceTags.length > 0) updateData.projectType = legacyTypeForTags(serviceTags);
     }
-    if (pipelineStatus !== undefined) updateData.pipelineStatus = pipelineStatus;
-    if (shootDate !== undefined) updateData.shootDate = shootDate ? new Date(shootDate) : null;
+    if (pipelineStatus !== undefined) {
+      if (!isPipelineStatus(pipelineStatus)) return NextResponse.json({ error: 'Invalid project status' }, { status: 400 });
+      updateData.pipelineStatus = pipelineStatus;
+    }
+    if (shootDate !== undefined) {
+      const parsed = parseOptionalDate(shootDate);
+      if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+      updateData.shootDate = parsed.date;
+    }
     if (notes !== undefined) updateData.notes = notes || null;
     if (clientId !== undefined) {
       const client = await prisma.client.findUnique({ where: { id: clientId } });
@@ -71,7 +87,7 @@ export async function PATCH(
       },
     });
 
-    return NextResponse.json({ project });
+    return NextResponse.json({ project, impact: await deleteImpact({ projectId: id }) });
   } catch (error) {
     console.error('Update project error:', error);
     return NextResponse.json({ error: 'Project not found or update failed' }, { status: 404 });

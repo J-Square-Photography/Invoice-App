@@ -6,6 +6,9 @@ import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'info';
 
+// Messages that don't say whether they are good news get a green tick when their title reads like a success
+const SUCCESS_TITLE = /^(success|saved|created|deleted|updated|copied|converted|verified|duplicated|paid|payment recorded|status updated|done|sent|added|removed|reverted|marked)/i;
+
 export interface ToastOptions {
   title?: string;
   description?: React.ReactNode;
@@ -54,6 +57,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           type = 'error';
         } else if (content.variant === 'success') {
           type = 'success';
+        } else if (content.title && SUCCESS_TITLE.test(content.title)) {
+          type = 'success';
         } else {
           type = 'info';
         }
@@ -61,9 +66,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
       setToasts((prev) => [...prev, { id, title, description, type }]);
 
+      // Errors stay a little longer so there is time to read what went wrong
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, 4000);
+      }, type === 'error' ? 8000 : 4000);
     },
     []
   );
@@ -81,7 +87,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none" role="status" aria-live="polite">
         {toasts.map((t) => (
           <div
             key={t.id}
@@ -99,6 +105,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             </div>
             <button
               onClick={() => removeToast(t.id)}
+              aria-label="Dismiss"
               className="ml-2 rounded-md p-1 hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700"
             >
               <X className="h-4 w-4" />

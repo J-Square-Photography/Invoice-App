@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveStatus, toCents } from '../invoice-status';
+import { deriveStatus, toCents, isOverdue } from '../invoice-status';
 
 describe('toCents', () => {
   it('avoids floating point drift', () => {
@@ -37,5 +37,21 @@ describe('deriveStatus (status follows payments)', () => {
     expect(deriveStatus('DRAFT', 0, 401.12)).toBe('DRAFT');
     expect(deriveStatus('SENT', 0, 401.12)).toBe('SENT');
     expect(deriveStatus('VOID', 401.12, 401.12)).toBe('VOID');
+  });
+});
+
+describe('isOverdue', () => {
+  const now = new Date(2026, 8, 22, 15, 0); // 22 Sep 2026, mid-afternoon
+
+  it('is overdue once the due date is before today, for sent and part-paid invoices only', () => {
+    expect(isOverdue('SENT', new Date(2026, 8, 21), now)).toBe(true);
+    expect(isOverdue('PARTIAL', new Date(2026, 7, 1), now)).toBe(true);
+    expect(isOverdue('DRAFT', new Date(2026, 7, 1), now)).toBe(false);
+    expect(isOverdue('PAID', new Date(2026, 7, 1), now)).toBe(false);
+    expect(isOverdue('VOID', new Date(2026, 7, 1), now)).toBe(false);
+  });
+
+  it('an invoice due today is not overdue yet', () => {
+    expect(isOverdue('SENT', new Date(2026, 8, 22, 0, 0), now)).toBe(false);
   });
 });

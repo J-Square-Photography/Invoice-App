@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { cleanTags, legacyTypeForTags } from '@/lib/service-tags';
+import { isPipelineStatus, parseOptionalDate, cleanTitle } from '@/lib/project-validation';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -50,12 +51,18 @@ export async function POST(request: NextRequest) {
     const { clientId, title, projectType, pipelineStatus, shootDate, notes } = body;
     const serviceTags = cleanTags(body.serviceTags);
 
-    if (!clientId || !title) {
+    const cleanedTitle = cleanTitle(title);
+    if (!clientId || !cleanedTitle) {
       return NextResponse.json(
         { error: 'Client and title are required' },
         { status: 400 }
       );
     }
+    if (pipelineStatus !== undefined && pipelineStatus !== '' && !isPipelineStatus(pipelineStatus)) {
+      return NextResponse.json({ error: 'Invalid project status' }, { status: 400 });
+    }
+    const parsedDate = parseOptionalDate(shootDate);
+    if ('error' in parsedDate) return NextResponse.json({ error: parsedDate.error }, { status: 400 });
 
     // Verify client exists
     const client = await prisma.client.findUnique({ where: { id: clientId } });
@@ -66,12 +73,12 @@ export async function POST(request: NextRequest) {
     const project = await prisma.project.create({
       data: {
         clientId,
-        title,
+        title: cleanedTitle,
         serviceTags,
         // Legacy single type follows the first tag when tags are given
         projectType: serviceTags.length > 0 ? legacyTypeForTags(serviceTags) : projectType || 'OTHER',
         pipelineStatus: pipelineStatus || 'INQUIRY',
-        shootDate: shootDate ? new Date(shootDate) : null,
+        shootDate: parsedDate.date,
         notes: notes || null,
       },
       include: {

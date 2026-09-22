@@ -32,6 +32,8 @@ import {
   FileText,
 } from 'lucide-react';
 import { CONTRACT_TEMPLATES, renderContractTemplate } from '@/lib/contract-templates';
+import { SortSelect, useSavedChoice } from '@/components/sort-filter';
+import { byDate, byNumber, byText, sortItems, type SortChoice } from '@/lib/sorting';
 
 interface InvoiceOption {
   id: string;
@@ -78,12 +80,22 @@ interface ContractListItem {
   } | null;
 }
 
+const SORT_CHOICES: SortChoice<ContractListItem>[] = [
+  { value: 'newest', label: 'Date Created: Newest to Oldest', compare: byDate((c) => c.createdAt, 'desc') },
+  { value: 'oldest', label: 'Date Created: Oldest to Newest', compare: byDate((c) => c.createdAt, 'asc') },
+  { value: 'signed-recent', label: 'Date Signed: Most Recent First', compare: byDate((c) => c.signedAt, 'desc') },
+  { value: 'client-az', label: 'Client Name: A to Z', compare: byText((c) => c.invoice.project.client.companyName) },
+  { value: 'amount-high', label: 'Invoice Amount: Highest to Lowest', compare: byNumber((c) => c.invoice.totalAmount, 'desc') },
+  { value: 'expiring', label: 'Signing Link Expiry: Soonest First', compare: byDate((c) => c.tokenExpiresAt, 'asc') },
+];
+
 export default function ContractsPage() {
   const { toast } = useToast();
   const [contracts, setContracts] = useState<ContractListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SIGNED' | 'PENDING'>('ALL');
+  const [sort, setSort] = useSavedChoice('contracts-sort', 'newest', SORT_CHOICES.map((c) => c.value));
 
   // Create Contract Dialog State
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -175,8 +187,12 @@ export default function ContractsPage() {
       const rendered = renderContractTemplate(tmpl.body, {
         ...studio,
         company_name: invoice.project.client.companyName,
-        client_name: invoice.project.client.contactName,
+        client_name: invoice.project.client.contactName || invoice.project.client.companyName,
         project_title: invoice.project.title,
+        shoot_date: invoice.project.shootDate
+          ? new Date(invoice.project.shootDate).toLocaleDateString('en-SG', { year: 'numeric', month: 'long', day: 'numeric' })
+          : 'To be scheduled',
+        due_date: new Date(invoice.dueDate).toLocaleDateString('en-SG', { year: 'numeric', month: 'short', day: 'numeric' }),
         total_amount: invoice.totalAmount.toFixed(2),
         deposit_amount: deposit,
         balance_due: balance,
@@ -264,7 +280,7 @@ export default function ContractsPage() {
       </div>
 
       {/* Filters Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
           <Input
@@ -274,7 +290,8 @@ export default function ContractsPage() {
             className="pl-9"
           />
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
+        <SortSelect value={sort} onChange={setSort} options={SORT_CHOICES} />
+        <div className="flex gap-2 w-full overflow-x-auto pb-1">
           <Button
             variant={statusFilter === 'ALL' ? 'default' : 'outline'}
             size="sm"
@@ -334,7 +351,7 @@ export default function ContractsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
-                  {contracts.map((c) => (
+                  {sortItems(contracts, SORT_CHOICES, sort).map((c) => (
                     <tr key={c.id} className="hover:bg-neutral-50 transition-colors">
                       <td className="py-3.5 px-4">
                         <Link href={`/admin/contracts/${c.id}`} className="font-semibold text-neutral-900 hover:underline">

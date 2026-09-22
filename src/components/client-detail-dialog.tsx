@@ -9,6 +9,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { PhoneInput } from '@/components/phone-input';
+import { FieldTag } from '@/components/field-tag';
+import { DeleteImpactWarning } from '@/components/delete-impact';
+import type { DeleteImpact } from '@/lib/delete-impact';
+import { missingClientInfo } from '@/lib/client-info';
 import {
   Dialog,
   DialogContent,
@@ -18,6 +22,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
+import { formatDate } from '@/lib/utils';
 import { Loader2, Edit, Trash2, Plus, Calendar } from 'lucide-react';
 import { PIPELINE_STATUS_LABELS } from '@/lib/constants';
 import { ServiceTagPicker, ServiceTagBadges } from '@/components/service-tag-picker';
@@ -35,7 +40,7 @@ interface ClientDetail {
   id: string;
   companyName: string;
   contactName: string;
-  email: string;
+  email: string | null;
   phone: string | null;
   uen: string | null;
   address: string | null;
@@ -93,6 +98,8 @@ export function ClientDetailDialog({
   const { toast } = useToast();
 
   const [client, setClient] = useState<ClientDetail | null>(null);
+  const [impact, setImpact] = useState<DeleteImpact | null>(null);
+  const [financials, setFinancials] = useState<{ invoiced: number; paid: number; outstanding: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [form, setForm] = useState<ClientForm | null>(null);
@@ -112,6 +119,8 @@ export function ClientDetailDialog({
       if (!res.ok) throw new Error('Failed to fetch client');
       const data = await res.json();
       setClient(data.client || data);
+      setImpact(data.impact ?? null);
+      setFinancials(data.financials ?? null);
     } catch {
       toast({ title: 'Error', description: 'Failed to load client details.', variant: 'destructive' });
       onClose();
@@ -148,15 +157,15 @@ export function ClientDetailDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error('Failed to update client');
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to update client');
       const updated = await res.json();
       const clientData = updated.client || updated;
       setClient((prev) => (prev ? { ...prev, ...clientData } : clientData));
       setMode('view');
       onChanged();
       toast({ title: 'Success', description: 'Client details updated.' });
-    } catch {
-      toast({ title: 'Error', description: 'Failed to update client.', variant: 'destructive' });
+    } catch (e) {
+      toast({ title: 'Could not save', description: e instanceof Error ? e.message : 'Failed to update client.', variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
@@ -223,36 +232,36 @@ export function ClientDetailDialog({
               <form onSubmit={saveClient} className="space-y-4 py-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="cd-companyName">Company Name *</Label>
+                    <Label htmlFor="cd-companyName">Client / Company Name <FieldTag required /></Label>
                     <Input id="cd-companyName" name="companyName" required value={form.companyName} onChange={handleFormChange} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="cd-contactName">Contact Name *</Label>
-                    <Input id="cd-contactName" name="contactName" required value={form.contactName} onChange={handleFormChange} />
+                    <Label htmlFor="cd-contactName">Contact Name <FieldTag /></Label>
+                    <Input id="cd-contactName" name="contactName" value={form.contactName} onChange={handleFormChange} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="cd-email">Email *</Label>
-                    <Input id="cd-email" name="email" type="email" required value={form.email} onChange={handleFormChange} />
+                    <Label htmlFor="cd-email">Email <FieldTag /></Label>
+                    <Input id="cd-email" name="email" type="email" value={form.email} onChange={handleFormChange} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="cd-phone">Phone</Label>
+                    <Label htmlFor="cd-phone">Phone <FieldTag /></Label>
                     <PhoneInput id="cd-phone" value={form.phone} onChange={(v) => setForm((prev) => (prev ? { ...prev, phone: v } : prev))} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="cd-uen">UEN</Label>
+                    <Label htmlFor="cd-uen">UEN <FieldTag /></Label>
                     <Input id="cd-uen" name="uen" value={form.uen} onChange={handleFormChange} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="cd-socials">Socials / Links</Label>
+                    <Label htmlFor="cd-socials">Socials / Links <FieldTag /></Label>
                     <Input id="cd-socials" name="socials" placeholder="e.g. instagram.com/company" value={form.socials} onChange={handleFormChange} />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="cd-address">Address (optional, printed on invoices)</Label>
+                  <Label htmlFor="cd-address">Address <FieldTag /></Label>
                   <Input id="cd-address" name="address" maxLength={300} placeholder="e.g. 123 Example Road, #01-23, Singapore 123456" value={form.address} onChange={handleFormChange} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="cd-notes">Internal Notes</Label>
+                  <Label htmlFor="cd-notes">Internal Notes <FieldTag /></Label>
                   <Textarea id="cd-notes" name="internalNotes" rows={4} value={form.internalNotes} onChange={handleFormChange} placeholder="Add notes about this client..." />
                 </div>
                 <DialogFooter className="pt-2">
@@ -271,20 +280,30 @@ export function ClientDetailDialog({
               <DialogHeader>
                 <DialogTitle>{client.companyName}</DialogTitle>
                 <DialogDescription>
-                  Client since {new Date(client.createdAt).toLocaleDateString()}
+                  Client since {formatDate(client.createdAt)}
                 </DialogDescription>
+                {missingClientInfo(client).length > 0 && (
+                  <p className="text-xs italic text-amber-600">Missing: {missingClientInfo(client).join(', ')}</p>
+                )}
               </DialogHeader>
 
               <div className="space-y-5 py-2">
+                {financials && financials.invoiced > 0 && (
+                  <div className="grid grid-cols-3 gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-center">
+                    <div><p className="text-[11px] uppercase tracking-wider text-neutral-500">Invoiced</p><p className="text-sm font-semibold">SGD ${financials.invoiced.toFixed(2)}</p></div>
+                    <div><p className="text-[11px] uppercase tracking-wider text-neutral-500">Paid</p><p className="text-sm font-semibold text-emerald-600">SGD ${financials.paid.toFixed(2)}</p></div>
+                    <div><p className="text-[11px] uppercase tracking-wider text-neutral-500">Outstanding</p><p className={`text-sm font-semibold ${financials.outstanding > 0 ? 'text-amber-600' : ''}`}>SGD ${financials.outstanding.toFixed(2)}</p></div>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label>Contact Name</Label>
-                    <div className="font-medium">{client.contactName}</div>
+                    <div className="font-medium">{client.contactName || '-'}</div>
                   </div>
                   <div className="space-y-1">
                     <Label>Email</Label>
                     <div className="font-medium">
-                      <a href={`mailto:${client.email}`} className="text-primary hover:underline">{client.email}</a>
+                      {client.email ? <a href={`mailto:${client.email}`} className="text-primary hover:underline">{client.email}</a> : '-'}
                     </div>
                   </div>
                   <div className="space-y-1">
@@ -355,7 +374,7 @@ export function ClientDetailDialog({
                             <div className="font-semibold text-sm truncate">{project.title}</div>
                             <div className="text-xs text-neutral-500 flex items-center gap-1.5 mt-0.5">
                               <Calendar className="h-3 w-3" />
-                              {project.shootDate ? new Date(project.shootDate).toLocaleDateString() : 'Shoot date TBD'}
+                              {project.shootDate ? formatDate(project.shootDate) : 'Shoot date TBD'}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 sm:justify-center">
@@ -394,15 +413,16 @@ export function ClientDetailDialog({
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Are you absolutely sure?</DialogTitle>
+            <DialogTitle>Delete this client?</DialogTitle>
             <DialogDescription>
-              This action cannot be undone. This will permanently delete <strong>{client?.companyName}</strong> and all associated data. Any linked projects might be affected depending on database constraints.
+              This cannot be undone. <strong>{client?.companyName}</strong> will be permanently deleted.
             </DialogDescription>
           </DialogHeader>
+          <DeleteImpactWarning impact={impact} showProjects />
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={isDeleting}>Cancel</Button>
             <Button variant="destructive" onClick={deleteClient} disabled={isDeleting}>
-              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete Client'}
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (impact && impact.projects + impact.invoices + impact.quotes + impact.payments + impact.contracts > 0 ? 'Delete Client and Everything Linked' : 'Delete Client')}
             </Button>
           </DialogFooter>
         </DialogContent>

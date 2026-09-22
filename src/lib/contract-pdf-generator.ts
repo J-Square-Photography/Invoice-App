@@ -1,5 +1,6 @@
 import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
 import { defaultPaymentConfig, type CompanyPaymentConfig } from './payment-config';
+import { loadUnicodeFonts, measureText, patchPage } from './pdf-unicode';
 
 export interface ContractPDFData {
   title: string;
@@ -9,7 +10,7 @@ export interface ContractPDFData {
   client: {
     companyName: string;
     contactName: string;
-    email: string;
+    email?: string | null;
     uen?: string | null;
   };
   projectTitle: string;
@@ -31,7 +32,20 @@ export interface ContractPDFData {
 export async function generateContractPDF(data: ContractPDFData): Promise<Uint8Array> {
   const cfg = data.company ?? defaultPaymentConfig;
   const pdfDoc = await PDFDocument.create();
-  let page = pdfDoc.addPage(PageSizes.A4);
+  // Names/text in other languages are drawn with a small embedded Noto subset (see pdf-unicode.ts)
+  const fallbacks = await loadUnicodeFonts(pdfDoc, [
+    data.title,
+    data.contractBody,
+    data.projectTitle,
+    data.client.companyName,
+    data.client.contactName,
+    data.client.email,
+    cfg.companyName,
+    data.signatureAudit?.signerName,
+    data.signatureAudit?.signerEmail,
+  ]);
+  const addPage = () => patchPage(pdfDoc.addPage(PageSizes.A4), fallbacks);
+  let page = addPage();
   let { width, height } = page.getSize();
 
   // Fonts
@@ -107,7 +121,7 @@ export async function generateContractPDF(data: ContractPDFData): Promise<Uint8A
 
   metaY -= 14;
   page.drawText('Authorized Signer:', { x: 60, y: metaY, size: 8.5, font: fontBold, color: darkGray });
-  page.drawText(`${data.client.contactName} (${data.client.email})`, { x: 170, y: metaY, size: 8.5, font: fontRegular, color: black });
+  page.drawText([data.client.contactName, data.client.email ? `(${data.client.email})` : ''].filter(Boolean).join(' ') || data.client.companyName, { x: 170, y: metaY, size: 8.5, font: fontRegular, color: black });
 
   page.drawText('Contract Value:', { x: 340, y: metaY, size: 8.5, font: fontBold, color: darkGray });
   page.drawText(`SGD $${data.totalAmount.toFixed(2)}`, { x: 440, y: metaY, size: 8.5, font: fontBold, color: accentRed });
@@ -150,11 +164,11 @@ export async function generateContractPDF(data: ContractPDFData): Promise<Uint8A
 
     for (const word of words) {
       const testLine = currentLine ? `${currentLine} ${word}` : word;
-      const testWidth = (isHeading ? fontBold : fontRegular).widthOfTextAtSize(testLine, fontSize);
+      const testWidth = measureText(testLine, fontSize, isHeading ? fontBold : fontRegular, fallbacks);
 
       if (testWidth > maxWidth) {
         if (y < 120) {
-          page = pdfDoc.addPage(PageSizes.A4);
+          page = addPage();
           y = height - 50;
         }
         page.drawText(currentLine, {
@@ -173,7 +187,7 @@ export async function generateContractPDF(data: ContractPDFData): Promise<Uint8A
 
     if (currentLine) {
       if (y < 120) {
-        page = pdfDoc.addPage(PageSizes.A4);
+        page = addPage();
         y = height - 50;
       }
       page.drawText(currentLine, {
@@ -189,7 +203,7 @@ export async function generateContractPDF(data: ContractPDFData): Promise<Uint8A
 
   // --- 4. SIGNATURE AUDIT CERTIFICATE ---
   if (y < 220) {
-    page = pdfDoc.addPage(PageSizes.A4);
+    page = addPage();
     y = height - 50;
   } else {
     y -= 15;
@@ -267,7 +281,7 @@ export async function generateContractPDF(data: ContractPDFData): Promise<Uint8A
 
     auditTextY -= 12;
     page.drawText('Signer Email:', { x: auditLeftX, y: auditTextY, size: 8, font: fontBold, color: darkGray });
-    page.drawText(audit.signerEmail || data.client.email, { x: auditLeftX + 90, y: auditTextY, size: 8, font: fontRegular, color: black });
+    page.drawText(audit.signerEmail || data.client.email || '-', { x: auditLeftX + 90, y: auditTextY, size: 8, font: fontRegular, color: black });
 
     auditTextY -= 12;
     const utcDateStr = new Date(audit.signedUtcTimestamp).toISOString().replace('T', ' ').replace('Z', ' UTC');

@@ -19,7 +19,10 @@ export async function POST(
   try {
     const existing = await prisma.invoice.findUnique({
       where: { id },
-      include: { paymentLogs: { select: { id: true, amountPaid: true } } },
+      include: {
+        paymentLogs: true,
+        project: { select: { client: { select: { companyName: true } } } },
+      },
     });
 
     if (!existing) {
@@ -32,6 +35,23 @@ export async function POST(
     const clearedCount = existing.paymentLogs.length;
 
     const invoice = await prisma.$transaction(async (tx) => {
+      // Keep a record of what is being removed and by whom, so the ledger is never silently lost
+      if (existing.paymentLogs.length > 0) {
+        await tx.paymentReversal.createMany({
+          data: existing.paymentLogs.map((p) => ({
+            invoiceId: id,
+            invoiceNumber: existing.invoiceNumber,
+            clientName: existing.project.client.companyName,
+            amountPaid: p.amountPaid,
+            paymentDate: p.paymentDate,
+            paymentMethod: p.paymentMethod,
+            transactionRef: p.transactionRef,
+            recordedBy: p.recordedBy,
+            verifiedBy: p.verifiedBy,
+            reversedBy: user.name || user.email,
+          })),
+        });
+      }
       await tx.paymentLog.deleteMany({ where: { invoiceId: id } });
       return tx.invoice.update({
         where: { id },

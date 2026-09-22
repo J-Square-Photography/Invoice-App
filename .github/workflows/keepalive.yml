@@ -1,0 +1,19 @@
+# A second, independent heartbeat, in case Vercel's scheduler ever misses a run.
+# Every 3 days it opens the app's keep-alive address, which makes one tiny database read so
+# Supabase's free plan never sees a week of inactivity and pauses the project.
+# Note: GitHub switches scheduled workflows off after 60 days without any commit to the repo;
+# any push turns them back on, and Vercel's own schedule keeps running regardless.
+name: keep-alive
+
+on:
+  schedule:
+    - cron: '0 4 */3 * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Wake the app and touch the database
+        run: curl --fail --silent --show-error --retry 3 --retry-delay 10 https://jsquare-crm.vercel.app/api/cron/keepalive

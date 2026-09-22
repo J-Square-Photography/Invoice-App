@@ -64,3 +64,13 @@ describe('payment snapshot', () => {
     expect(resolveCompany({ paymentSnapshot: older }, live).gstRegNo).toBe('M90376150R');
   });
 });
+
+describe('sample payment details', () => {
+  it('flags the built-in sample UEN and bank account, and only those', async () => {
+    const { usesSamplePaymentDetails } = await import('../payment-config');
+    expect(usesSamplePaymentDetails({ uen: '202012345M', bankAccountNumber: '111-222333-4' })).toBe(true);
+    expect(usesSamplePaymentDetails({ uen: '201912345a', bankAccountNumber: '012-345678-9' })).toBe(true);
+    expect(usesSamplePaymentDetails({ uen: '202012345m', bankAccountNumber: '111' })).toBe(true);
+    expect(usesSamplePaymentDetails({ uen: '201912345A', bankAccountNumber: '111-222333-4' })).toBe(false);
+  });
+});

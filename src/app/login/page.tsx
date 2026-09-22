@@ -1,22 +1,29 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { safeRedirectPath } from '@/lib/safe-redirect';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect') || '/admin';
+  const redirect = safeRedirectPath(searchParams.get('redirect'));
+  const expired = searchParams.has('expired');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Arriving with ?expired=1 means the session ended (e.g. the account was deactivated): clear the old cookie
+  useEffect(() => {
+    if (expired) fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  }, [expired]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,6 +55,11 @@ function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {expired && !error && (
+        <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
+          Your session ended. Please sign in again.
+        </div>
+      )}
       {error && (
         <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
           {error}

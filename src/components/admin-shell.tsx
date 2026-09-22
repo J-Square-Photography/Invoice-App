@@ -10,6 +10,8 @@ import {
   Users,
   FolderKanban,
   FileText,
+  ClipboardList,
+  Wallet,
   FileSignature,
   Bell,
   UserCog,
@@ -20,15 +22,20 @@ import {
   X,
   Shield,
   ShieldCheck,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LogoToggle } from '@/components/logo-toggle';
+import { GlobalSearch } from '@/components/global-search';
+import { AppearanceButton } from '@/components/appearance-dialog';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Clients', href: '/admin/clients', icon: Users },
   { name: 'Projects', href: '/admin/projects', icon: FolderKanban },
+  { name: 'Quotes', href: '/admin/quotes', icon: ClipboardList },
   { name: 'Invoices', href: '/admin/invoices', icon: FileText },
+  { name: 'Payments', href: '/admin/payments', icon: Wallet },
   { name: 'Contracts', href: '/admin/contracts', icon: FileSignature },
   { name: 'Alerts', href: '/admin/alerts', icon: Bell },
 ];
@@ -40,6 +47,7 @@ const adminNavigation = [
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const pathname = usePathname();
   const { user, loading, logout } = useAuth();
 
@@ -47,6 +55,23 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [pathname]);
+
+  // Ctrl+K / Cmd+K, or "/" outside a text field, opens search
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((o) => !o);
+      } else if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Prevent background scrolling when mobile drawer is open
   useEffect(() => {
@@ -71,6 +96,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <p className="text-sm font-semibold text-neutral-900">J Square Photography</p>
             <p className="text-xs text-neutral-500">CRM</p>
           </div>
+        </div>
+
+        {/* Search */}
+        <div className="px-3 pt-4">
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="flex w-full items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-500 hover:bg-neutral-100 transition-colors"
+          >
+            <Search className="h-4 w-4" />
+            <span className="flex-1 text-left">Search...</span>
+            <kbd className="rounded border border-neutral-300 bg-white px-1.5 text-[10px] font-medium text-neutral-500">Ctrl K</kbd>
+          </button>
         </div>
 
         {/* Desktop Navigation */}
@@ -146,9 +184,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   {user.role === 'SUPER_ADMIN' ? 'Developer' : 'Manager'}
                 </p>
               </div>
-              <Button variant="ghost" size="icon" onClick={logout} title="Sign out" className="shrink-0">
-                <LogOut className="h-4 w-4" />
-              </Button>
+              <div className="flex shrink-0 items-center">
+                <AppearanceButton />
+                <Button variant="ghost" size="icon" onClick={logout} title="Sign out">
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           ) : null}
         </div>
@@ -317,6 +358,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2">
+            <AppearanceButton className="h-9 w-9 text-neutral-500 hover:text-neutral-900" />
+            <Button variant="ghost" size="icon" onClick={() => setSearchOpen(true)} aria-label="Search" title="Search" className="h-9 w-9 text-neutral-500 hover:text-neutral-900">
+              <Search className="h-4 w-4" />
+            </Button>
             {user && (
               <span className="text-xs font-medium text-neutral-600 bg-neutral-100 px-2 py-1 rounded-md">
                 {user.role === 'SUPER_ADMIN' ? 'Developer' : 'Manager'}
@@ -339,6 +384,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
   );
 }

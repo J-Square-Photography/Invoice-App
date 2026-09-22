@@ -445,6 +445,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [values, setValues] = useState<SettingsValues | null>(null);
   const [staticQr, setStaticQr] = useState<string | null>(null);
+  const [usingSample, setUsingSample] = useState(false);
   const [meta, setMeta] = useState<{ updatedAt: string | null; updatedBy: string | null }>({
     updatedAt: null,
     updatedBy: null,
@@ -458,6 +459,7 @@ export default function SettingsPage() {
       const data = await res.json();
       setValues(data.settings);
       setStaticQr(data.staticQrDataUrl ?? null);
+      setUsingSample(!!data.usingSampleDetails);
       setMeta({ updatedAt: data.updatedAt, updatedBy: data.updatedBy });
     } catch {
       toast({ title: 'Error', description: 'Failed to load settings.', variant: 'destructive' });
@@ -484,6 +486,7 @@ export default function SettingsPage() {
       }
       setValues(data.settings);
       setStaticQr(data.staticQrDataUrl ?? null);
+      setUsingSample(!!data.usingSampleDetails);
       setMeta({ updatedAt: new Date().toISOString(), updatedBy: user?.email ?? null });
       toast({ title: 'Saved', description: successMessage });
       return true;
@@ -524,6 +527,13 @@ export default function SettingsPage() {
           </p>
         )}
       </div>
+
+      {usingSample && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <strong>These are sample values, not your real details.</strong> The UEN (202012345M) and bank account (012-345678-9) below are built-in placeholders.
+          Unlock each field and enter your real UEN and bank account: until you do, invoices can&apos;t be marked Sent, and PayNow QR codes would pay the wrong account.
+        </div>
+      )}
 
       <Card>
         <CardHeader>

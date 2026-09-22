@@ -57,6 +57,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchUser();
   }, []);
 
+  // If the session ends while the page is open (signed out elsewhere, account deactivated), any API
+  // call comes back 401. Send the person to sign in again instead of leaving them with silent errors.
+  useEffect(() => {
+    const original = window.fetch;
+    let redirecting = false;
+    window.fetch = async (...args) => {
+      const res = await original(...args);
+      const url = typeof args[0] === 'string' ? args[0] : args[0] instanceof Request ? args[0].url : String(args[0]);
+      if (res.status === 401 && !redirecting && /\/api\//.test(url) && !/\/api\/auth\//.test(url)) {
+        redirecting = true;
+        window.location.href = `/login?expired=1&redirect=${encodeURIComponent(window.location.pathname)}`;
+      }
+      return res;
+    };
+    return () => {
+      window.fetch = original;
+    };
+  }, []);
+
   return (
     <AuthContext.Provider value={{ user, loading, refresh: fetchUser, logout }}>
       {children}

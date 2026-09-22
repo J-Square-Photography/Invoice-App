@@ -9,6 +9,8 @@ import {
   Users,
   FolderKanban,
   FileText,
+  ClipboardList,
+  Wallet,
   FileSignature,
   Bell,
   UserCog,
@@ -23,7 +25,9 @@ const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Clients', href: '/admin/clients', icon: Users },
   { name: 'Projects', href: '/admin/projects', icon: FolderKanban },
+  { name: 'Quotes', href: '/admin/quotes', icon: ClipboardList },
   { name: 'Invoices', href: '/admin/invoices', icon: FileText },
+  { name: 'Payments', href: '/admin/payments', icon: Wallet },
   { name: 'Contracts', href: '/admin/contracts', icon: FileSignature },
   { name: 'Alerts', href: '/admin/alerts', icon: Bell },
 ];

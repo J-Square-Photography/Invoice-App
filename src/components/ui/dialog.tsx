@@ -9,6 +9,9 @@ interface DialogContextType {
   setOpen: (open: boolean) => void;
 }
 
+// Close handlers of the pop-ups currently open, oldest first
+const openStack: Array<() => void> = [];
+
 const DialogContext = React.createContext<DialogContextType>({
   open: false,
   setOpen: () => {},
@@ -58,6 +61,27 @@ function DialogContent({
 }: React.HTMLAttributes<HTMLDivElement>) {
   const { open, setOpen } = React.useContext(DialogContext);
 
+  // Esc closes the pop-up. With pop-ups stacked on top of each other, only the top one closes.
+  const closeRef = React.useRef(setOpen);
+  closeRef.current = setOpen;
+  React.useEffect(() => {
+    if (!open) return;
+    const close = () => closeRef.current(false);
+    openStack.push(close);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && openStack[openStack.length - 1] === close) {
+        e.stopPropagation();
+        close();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      const at = openStack.indexOf(close);
+      if (at >= 0) openStack.splice(at, 1);
+    };
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -69,6 +93,8 @@ function DialogContent({
       />
       {/* Content */}
       <div
+        role="dialog"
+        aria-modal="true"
         className={cn(
           'relative z-50 w-full min-w-0 max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden rounded-lg border border-neutral-200 bg-white p-6 shadow-lg',
           className

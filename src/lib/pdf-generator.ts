@@ -2,8 +2,12 @@ import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
 import { defaultPaymentConfig, type CompanyPaymentConfig } from './payment-config';
 import { generatePayNowPayload, generatePayNowQRDataURL } from './sgqr';
 import { discountName, discountTerms } from './invoice-calculations';
+import { loadUnicodeFonts, splitRuns, hasNonBasic } from './pdf-unicode';
 
 export interface InvoicePDFData {
+  /** Quotations reuse this layout: no payment details or QR, and dueDate is the valid-until date. */
+  documentType?: 'INVOICE' | 'QUOTE';
+  /** The invoice number, or the quotation number for a quote. */
   invoiceNumber: string;
   issueDate: string | Date;
   dueDate: string | Date;
@@ -22,8 +26,8 @@ export interface InvoicePDFData {
   notes?: string | null;
   client: {
     companyName: string;
-    contactName: string;
-    email: string;
+    contactName?: string | null;
+    email?: string | null;
     phone?: string | null;
     uen?: string | null;
     address?: string | null;
@@ -39,8 +43,11 @@ export interface InvoicePDFData {
   }>;
 }
 
+class SkipQr extends Error {}
+
 export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Array> {
   const cfg = data.company ?? defaultPaymentConfig;
+  const isQuote = data.documentType === 'QUOTE';
   const pdfDoc = await PDFDocument.create();
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -78,32 +85,72 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   // --- Small drawing helpers ---
   // The standard PDF fonts can't draw every character (e.g. Chinese names); swap those for "?" instead of failing
-  const safe = (s: string) => s.replace(/[^\x20-\x7E\u00A0-\u00FF\u2022\u2013\u2014\u2018\u2019\u201C\u201D]/g, '?');
-  const measure = (s: string, size: number, font: Font) => font.widthOfTextAtSize(safe(s), size);
+  // Names in other languages are drawn with a small embedded Noto subset (see pdf-unicode.ts);
+  // anything still unavailable becomes "?" rather than failing.
+  const fallbacks = await loadUnicodeFonts(pdfDoc, [
+    data.projectTitle,
+    data.notes,
+    data.client.companyName,
+    data.client.contactName,
+    data.client.email,
+    data.client.phone,
+    data.client.uen,
+    data.client.address,
+    cfg.companyName,
+    cfg.address,
+    cfg.bankName,
+    cfg.bankAccountName,
+    ...data.items.map((i) => i.description),
+    ...(data.discounts ?? []).map((d) => d.name),
+  ]);
+  const measure = (s: string, size: number, font: Font) =>
+    splitRuns(s, fallbacks).reduce((w, r) => w + (r.font ?? font).widthOfTextAtSize(r.text, size), 0);
   const fit = (s: string, size: number, font: Font, maxWidth: number) => {
-    let out = safe(s);
-    while (out.length > 1 && font.widthOfTextAtSize(out, size) > maxWidth) out = out.slice(0, -1);
-    return out === safe(s) ? out : `${out.trimEnd()}...`;
+    let out = s;
+    while (out.length > 1 && measure(out, size, font) > maxWidth) out = out.slice(0, -1);
+    return out === s ? out : `${out.trimEnd()}...`;
   };
   const wrap = (s: string, size: number, font: Font, maxWidth: number): string[] => {
-    const words = safe(s).split(/\s+/).filter(Boolean);
+    const words = s.split(/\s+/).filter(Boolean);
     const lines: string[] = [];
     let current = '';
     for (const word of words) {
       const trial = current ? `${current} ${word}` : word;
-      if (font.widthOfTextAtSize(trial, size) <= maxWidth) {
+      if (measure(trial, size, font) <= maxWidth) {
         current = trial;
       } else {
         if (current) lines.push(current);
-        // a single very long word is cut to fit rather than overflowing
-        current = font.widthOfTextAtSize(word, size) > maxWidth ? fit(word, size, font, maxWidth) : word;
+        current = '';
+        if (measure(word, size, font) <= maxWidth) {
+          current = word;
+        } else if (hasNonBasic(word)) {
+          // Chinese/Japanese have no spaces: break between characters instead of cutting the text off
+          for (const ch of Array.from(word)) {
+            if (current && measure(current + ch, size, font) > maxWidth) {
+              lines.push(current);
+              current = '';
+            }
+            current += ch;
+          }
+        } else {
+          // a single very long word is cut to fit rather than overflowing
+          current = fit(word, size, font, maxWidth);
+        }
       }
     }
     if (current) lines.push(current);
     return lines.length ? lines : [''];
   };
+  const drawOn = (p: typeof page, s: string, x: number, y: number, size: number, font: Font, color: Colour) => {
+    let cx = x;
+    for (const r of splitRuns(s, fallbacks)) {
+      const f = r.font ?? font;
+      p.drawText(r.text, { x: cx, y, size, font: f, color });
+      cx += f.widthOfTextAtSize(r.text, size);
+    }
+  };
   const text = (s: string, x: number, y: number, size: number, font: Font, color: Colour) =>
-    page.drawText(safe(s), { x, y, size, font, color });
+    drawOn(page, s, x, y, size, font, color);
   const textRight = (s: string, xRight: number, y: number, size: number, font: Font, color: Colour) =>
     text(s, xRight - measure(s, size, font), y, size, font, color);
   const textCentre = (s: string, xCentre: number, y: number, size: number, font: Font, color: Colour) =>
@@ -138,12 +185,16 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   // ============ 2. TITLE ROW ============
   // A document that charges GST is a Tax Invoice
-  text(data.isGstApplied ? 'Tax Invoice' : 'Invoice', M, H - 140, 24, fontBold, black);
+  text(isQuote ? 'Quotation' : data.isGstApplied ? 'Tax Invoice' : 'Invoice', M, H - 140, 24, fontBold, black);
   text(`Issued on ${fmtDate(data.issueDate)}`, M, H - 154, 8.5, fontRegular, darkGray);
 
-  textRight(`Invoice #${data.invoiceNumber}`, RIGHT, H - 134, 12, fontBold, black);
-  const statusColor = data.status === 'PAID' ? green : data.status === 'PARTIAL' ? accentGold : accentRed;
-  const statusLabel = `STATUS: ${data.status}`;
+  textRight(`${isQuote ? 'Quotation' : 'Invoice'} #${data.invoiceNumber}`, RIGHT, H - 134, 12, fontBold, black);
+  const statusColor = isQuote
+    ? data.status === 'ACCEPTED' ? green : data.status === 'DECLINED' ? lightGray : STRONG
+    : data.status === 'PAID' ? green : data.status === 'PARTIAL' ? accentGold : accentRed;
+  const statusLabel = isQuote
+    ? data.status === 'ACCEPTED' || data.status === 'DECLINED' ? `${data.status}` : `VALID UNTIL ${fmtDate(data.dueDate).toUpperCase()}`
+    : `STATUS: ${data.status}`;
   const badgeW = measure(statusLabel, 8, fontBold) + 18;
   fillBox(RIGHT - badgeW, H - 160, badgeW, 16, statusColor);
   textRight(statusLabel, RIGHT - 9, H - 155, 8, fontBold, white);
@@ -164,15 +215,20 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   vLine(x3, stripTop, stripTop - stripH, RULE, SOFT);
 
   const label = (s: string, x: number, y: number) => text(s, x, y, 7.5, fontBold, accentRed);
-  label('INVOICE TO', M + 10, stripTop - 15);
+  label(isQuote ? 'QUOTATION FOR' : 'INVOICE TO', M + 10, stripTop - 15);
   text(fit(data.client.companyName, 11, fontBold, c1 - 20), M + 10, stripTop - 31, 11, fontBold, black);
-  text(fit(`Attn: ${data.client.contactName}`, 9, fontRegular, c1 - 20), M + 10, stripTop - 45, 9, fontRegular, darkGray);
-  text(fit(`Email: ${data.client.email}`, 9, fontRegular, c1 - 20), M + 10, stripTop - 57, 9, fontRegular, darkGray);
-  if (data.client.phone) {
-    text(fit(`Phone: ${data.client.phone}`, 9, fontRegular, c1 - 20), M + 10, stripTop - 69, 9, fontRegular, darkGray);
-  }
-  const addressTop = stripTop - (data.client.phone ? 69 : 57) - 12;
-  clientAddressLines.forEach((l, i) => text(l, M + 10, addressTop - i * 11, 8.5, fontRegular, darkGray));
+  // Contact details are all optional, so only the ones that exist are drawn
+  const contactLines = [
+    data.client.contactName?.trim() ? `Attn: ${data.client.contactName.trim()}` : '',
+    data.client.email?.trim() ? `Email: ${data.client.email.trim()}` : '',
+    data.client.phone?.trim() ? `Phone: ${data.client.phone.trim()}` : '',
+  ].filter(Boolean);
+  let contactY = stripTop - 45;
+  contactLines.forEach((line) => {
+    text(fit(line, 9, fontRegular, c1 - 20), M + 10, contactY, 9, fontRegular, darkGray);
+    contactY -= 12;
+  });
+  clientAddressLines.forEach((l, i) => text(l, M + 10, contactY - i * 11, 8.5, fontRegular, darkGray));
 
   label('PROJECT / ASSIGNMENT', x2 + 10, stripTop - 15);
   const allProjectLines = wrap(data.projectTitle, 11, fontBold, c2 - 20);
@@ -189,8 +245,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   label('DATES', x3 + 10, stripTop - 15);
   text('Issued', x3 + 10, stripTop - 30, 7.5, fontRegular, lightGray);
   text(fmtDate(data.issueDate), x3 + 10, stripTop - 41, 9, fontRegular, black);
-  text('Due', x3 + 10, stripTop - 55, 7.5, fontRegular, lightGray);
-  text(fmtDate(data.dueDate), x3 + 10, stripTop - 66, 9, fontBold, data.status === 'PAID' ? black : accentRed);
+  text(isQuote ? 'Valid until' : 'Due', x3 + 10, stripTop - 55, 7.5, fontRegular, lightGray);
+  text(fmtDate(data.dueDate), x3 + 10, stripTop - 66, 9, fontBold, isQuote || data.status === 'PAID' ? black : accentRed);
 
   // ============ 4. ITEMS TABLE ============
   const HEADER_H = 22;
@@ -239,8 +295,14 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     if (item) {
       lines.forEach((l, i) => text(l, M + cellPad, y - 15 - i * 11.5, 9, fontRegular, black));
       textCentre(String(item.quantity), (qtyX + unitX) / 2, y - 15, 9, fontRegular, darkGray);
-      textRight(money(item.unitPrice), amtX - cellPad, y - 15, 9, fontRegular, darkGray);
-      textRight(money(item.amount), RIGHT - cellPad, y - 15, 9, fontBold, black);
+      if (item.amount === 0) {
+        // A no-charge line (e.g. "Culling and editing") reads as included rather than $0.00
+        textRight('-', amtX - cellPad, y - 15, 9, fontRegular, lightGray);
+        textRight('Included', RIGHT - cellPad, y - 15, 9, fontRegular, darkGray);
+      } else {
+        textRight(money(item.unitPrice), amtX - cellPad, y - 15, 9, fontRegular, darkGray);
+        textRight(money(item.amount), RIGHT - cellPad, y - 15, 9, fontBold, black);
+      }
     }
     y -= rowH;
     hLine(M, RIGHT, y, RULE, SOFT);
@@ -260,21 +322,23 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   if (data.isGstApplied) {
     totalsRows.push({ label: `Singapore GST (${data.gstRate}%)`, value: money(data.gstAmount), kind: 'normal' });
   }
-  totalsRows.push({ label: 'TOTAL AMOUNT', value: money(data.totalAmount), kind: 'total' });
-  totalsRows.push({ label: 'Paid to Date', value: money(data.paidAmount), kind: 'paid' });
-  totalsRows.push({ label: 'BALANCE DUE (SGD)', value: money(data.balanceDue), kind: 'balance' });
+  totalsRows.push({ label: isQuote ? 'QUOTED TOTAL (SGD)' : 'TOTAL AMOUNT', value: money(data.totalAmount), kind: 'total' });
+  if (!isQuote) {
+    totalsRows.push({ label: 'Paid to Date', value: money(data.paidAmount), kind: 'paid' });
+    totalsRows.push({ label: 'BALANCE DUE (SGD)', value: money(data.balanceDue), kind: 'balance' });
+  }
 
   const rowHeight = (k: TotalsRow['kind']) => (k === 'total' ? 24 : k === 'balance' ? 26 : 19);
   const totalsH = totalsRows.reduce((sum, r) => sum + rowHeight(r.kind), 0);
   const TW = 210;
   const TX = RIGHT - TW;
   const QR_SIZE = 100;
-  const rightColH = totalsH + 14 + QR_SIZE + 30;
+  const rightColH = isQuote ? totalsH : totalsH + 14 + QR_SIZE + 30;
 
   const LW = TX - 20 - M; // left column width, with a clear gutter before the totals
   const noteLines = data.notes && data.notes.trim() ? wrap(data.notes.trim(), 8.5, fontRegular, LW - 20).slice(0, 8) : [];
   const notesH = noteLines.length > 0 ? 26 + noteLines.length * 11 : 0;
-  const PAY_H = 140;
+  const PAY_H = isQuote ? 96 : 140;
   const leftColH = notesH + (notesH ? 12 : 0) + PAY_H;
 
   // Not enough room left on this page for the whole block: it moves to a fresh page together
@@ -333,10 +397,20 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   fillBox(M, ly - 22, LW, 22, TINT);
   hLine(M, M + LW, ly - 22, RULE, SOFT);
   edgeBox(M, ly - PAY_H, LW, PAY_H);
-  text('PAYMENT INSTRUCTIONS', M + 12, ly - 15, 9.5, fontBold, accentRed);
+  text(isQuote ? 'HOW TO ACCEPT' : 'PAYMENT INSTRUCTIONS', M + 12, ly - 15, 9.5, fontBold, accentRed);
   const px = M + 12;
   const pw = LW - 24;
   let py = ly - 38;
+  if (isQuote) {
+    // A quotation asks for a reply, not a payment
+    const acceptLines = [
+      `This quotation is valid until ${fmtDate(data.dueDate)}.`,
+      'To confirm the booking, reply to this quotation.',
+      'We will then issue an invoice for payment.',
+      'All prices are in Singapore dollars (SGD).',
+    ];
+    acceptLines.forEach((l, i) => text(fit(l, 8.5, fontRegular, pw), px, py - i * 13, 8.5, fontRegular, i === 0 ? black : darkGray));
+  } else {
   text('1. Bank Transfer', px, py, 8.5, fontBold, black);
   py -= 12;
   text(fit(`Bank: ${cfg.bankName}${cfg.bankBranchCode ? ` (Branch: ${cfg.bankBranchCode})` : ''}`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, darkGray);
@@ -352,9 +426,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   text('DBS PayLah!, OCBC, UOB, GrabPay', px + 10, py, 8, fontRegular, darkGray);
   py -= 11;
   text(`Ref: ${data.invoiceNumber}`, px + 10, py, 8, fontBold, accentRed);
+  }
 
-  // --- PayNow QR, centred under the totals ---
+  // --- PayNow QR, centred under the totals (invoices only) ---
   try {
+    if (isQuote) throw new SkipQr();
     const qrAmount = data.balanceDue > 0 ? data.balanceDue : data.totalAmount;
     // Invoices set to "Static PayNow QR" show the uploaded image instead of a generated code
     const staticQr = data.paymentMethod === 'PAYNOW_STATIC_QR' ? data.company?.staticQrDataUrl ?? null : null;
@@ -380,19 +456,13 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     textCentre(staticQr ? 'PayNow QR' : 'PayNow SGQR', centreX, qrBottom - 12, 8, fontBold, accentRed);
     textCentre(staticQr ? `Enter SGD $${qrAmount.toFixed(2)}` : `Scan SGD $${qrAmount.toFixed(2)}`, centreX, qrBottom - 22, 7.5, fontRegular, darkGray);
   } catch (err) {
-    console.error('Failed to embed SGQR code in PDF:', err);
+    if (!(err instanceof SkipQr)) console.error('Failed to embed SGQR code in PDF:', err);
   }
 
   // ============ 6. FOOTER (every page) ============
   pages.forEach((p, i) => {
     p.drawLine({ start: { x: M, y: FOOTER_Y + 15 }, end: { x: RIGHT, y: FOOTER_Y + 15 }, thickness: RULE, color: SOFT });
-    p.drawText(safe(`Thank you for partnering with ${cfg.companyName}. All rights reserved.`), {
-      x: M,
-      y: FOOTER_Y,
-      size: 8,
-      font: fontOblique,
-      color: lightGray,
-    });
+    drawOn(p, `Thank you for partnering with ${cfg.companyName}. All rights reserved.`, M, FOOTER_Y, 8, fontOblique, lightGray);
     const label = `Page ${i + 1} of ${pages.length}`;
     p.drawText(label, { x: RIGHT - fontRegular.widthOfTextAtSize(label, 8), y: FOOTER_Y, size: 8, font: fontRegular, color: lightGray });
   });

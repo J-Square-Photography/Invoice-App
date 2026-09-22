@@ -21,3 +21,13 @@ export function deriveStatus(currentStatus: string, paidAmount: number | string,
 
 /** Statuses a person may choose by hand. PARTIAL and PAID are only ever set by payments. */
 export const MANUAL_STATUSES = ['DRAFT', 'SENT', 'VOID'] as const;
+
+/**
+ * An invoice is overdue when it has been sent (fully or partly unpaid) and its due date
+ * was before today. Drafts, paid and void invoices are never overdue.
+ */
+export function isOverdue(status: string, dueDate: string | Date, now: Date = new Date()): boolean {
+  if (status !== 'SENT' && status !== 'PARTIAL') return false;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return new Date(dueDate) < startOfToday;
+}

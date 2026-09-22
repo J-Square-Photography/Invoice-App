@@ -4,6 +4,9 @@ import { getCurrentUser } from '@/lib/auth';
 import { getCompanySettings } from '@/lib/company-settings';
 import { makeSnapshot, parseSnapshot, snapshotForDb } from '@/lib/payment-snapshot';
 import { deriveStatus, toCents } from '@/lib/invoice-status';
+import { parseProofDataUrl, hasPaymentEvidence, getStorageStatus } from '@/lib/payment-proof';
+import { ROLES } from '@/lib/constants';
+import { usesSamplePaymentDetails } from '@/lib/payment-config';
 
 class PaymentRejected extends Error {
   constructor(message: string, public status = 400) {
@@ -28,6 +31,7 @@ export async function POST(
       paymentMethod = 'PAYNOW_QR',
       transactionRef,
       notes,
+      proofImage,
     } = body;
 
     const parsedAmount = parseFloat(amountPaid);
@@ -41,6 +45,29 @@ export async function POST(
     if (amountCents <= 0) {
       return NextResponse.json({ error: 'Payment amount must be at least SGD 0.01' }, { status: 400 });
     }
+
+    // Proof of payment: a shrunk screenshot, and/or the bank reference. One of them is required.
+    let proof: { mime: string; data: Buffer } | null = null;
+    if (proofImage) {
+      const parsed = parseProofDataUrl(proofImage);
+      if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+      const storage = await getStorageStatus().catch(() => null);
+      if (storage?.level === 'full') {
+        return NextResponse.json(
+          { error: 'Storage is nearly full, so new proof images are paused. Record the payment with the bank reference instead, and archive old proofs.' },
+          { status: 507 }
+        );
+      }
+      proof = parsed;
+    }
+    if (!hasPaymentEvidence({ hasProof: !!proof, reference: transactionRef, notes, method: paymentMethod })) {
+      return NextResponse.json(
+        { error: 'Add proof that the money arrived: attach a screenshot of the payment, or enter the bank reference (for cash or cheque, a receipt note).' },
+        { status: 400 }
+      );
+    }
+    // A Developer checking their own entry counts as verified; a Manager's entry waits for a Developer to verify it
+    const selfVerified = user.role === ROLES.SUPER_ADMIN;
 
     // Read live settings before the transaction (only used if this is the first payment)
     const live = await getCompanySettings();
@@ -76,14 +103,17 @@ export async function POST(
           amountPaid: amountCents / 100,
           paymentDate: new Date(paymentDate),
           paymentMethod,
-          transactionRef: transactionRef || null,
+          transactionRef: transactionRef?.toString().trim() || null,
           notes: notes || null,
           recordedBy: user.name || user.email,
+          proofBytes: proof ? proof.data.length : null,
+          ...(proof ? { proof: { create: { mime: proof.mime, data: proof.data } } } : {}),
+          ...(selfVerified ? { verifiedAt: new Date(), verifiedBy: user.name || user.email } : {}),
         },
       });
 
       // The first payment freezes the payment details the client was given
-      const freezeDetails = !parseSnapshot(invoice.paymentSnapshot)
+      const freezeDetails = !parseSnapshot(invoice.paymentSnapshot) && !usesSamplePaymentDetails(live)
         ? snapshotForDb(makeSnapshot(live, invoice.paymentMethod))
         : undefined;
 

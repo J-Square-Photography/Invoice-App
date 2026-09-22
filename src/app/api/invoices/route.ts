@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { defaultPaymentConfig } from '@/lib/payment-config';
-import { calculateInvoiceTotals } from '@/lib/invoice-calculations';
-import type { Prisma } from '@prisma/client';
+import { createDraftInvoice } from '@/lib/create-invoice';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -93,65 +92,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    // Generate sequential invoice number: JSQ-YYYY-XXXX
-    const currentYear = new Date().getFullYear();
-    const count = await prisma.invoice.count({
-      where: {
-        invoiceNumber: {
-          startsWith: `JSQ-${currentYear}-`,
-        },
-      },
-    });
-
-    const nextSeq = (count + 1).toString().padStart(4, '0');
-    const invoiceNumber = `JSQ-${currentYear}-${nextSeq}`;
-
-    // Calculate item amounts, subtotal, GST, and total
-    const {
-      items: processedItems,
-      subtotal,
-      gstRate: calculatedGstRate,
-      gstAmount,
-      totalAmount,
-      discounts: processedDiscounts,
-      discountAmount,
-    } = calculateInvoiceTotals(items, { isGstApplied, gstRate, discounts: Array.isArray(discounts) ? discounts : [] });
-
-    // Create Invoice with items in a transaction
-    const invoice = await prisma.$transaction(async (tx) => {
-      const created = await tx.invoice.create({
-        data: {
-          projectId,
-          invoiceNumber,
-          subtotal,
-          discountAmount,
-          discounts:
-            processedDiscounts.length > 0 ? (processedDiscounts as unknown as Prisma.InputJsonValue) : undefined,
-          isGstApplied,
-          gstRate: calculatedGstRate,
-          gstAmount,
-          totalAmount,
-          paidAmount: 0,
-          balanceDue: totalAmount,
-          issueDate: new Date(),
-          dueDate: new Date(dueDate),
-          status: 'DRAFT',
-          paymentMethod,
-          notes: notes || null,
-          items: {
-            create: processedItems,
-          },
-        },
-        include: {
-          project: {
-            include: { client: true },
-          },
-          items: true,
-          paymentLogs: true,
-        },
-      });
-
-      return created;
+    const invoice = await createDraftInvoice({
+      projectId,
+      dueDate,
+      paymentMethod,
+      isGstApplied,
+      gstRate,
+      notes,
+      items,
+      discounts: Array.isArray(discounts) ? discounts : [],
     });
 
     return NextResponse.json({ invoice }, { status: 201 });

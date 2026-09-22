@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { computeDocumentAuditHash } from '@/lib/audit-crypto';
 
+// A drawn signature is a small PNG/JPEG/WebP. Anything bigger is refused so a signing link can't be used to fill the database.
+const SIGNATURE_PATTERN = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+const MAX_SIGNATURE_CHARS = 400_000;
+
+class AlreadySigned extends Error {}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const token = searchParams.get('token');
@@ -80,11 +86,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Signing token is required' }, { status: 400 });
     }
 
-    if (!signerName?.trim()) {
+    if (typeof signerName !== 'string' || !signerName.trim()) {
       return NextResponse.json({ error: 'Signer full name is required' }, { status: 400 });
     }
+    if (signerName.trim().length > 120) {
+      return NextResponse.json({ error: 'That name is too long' }, { status: 400 });
+    }
+    if (signerEmail && (typeof signerEmail !== 'string' || signerEmail.trim().length > 200 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signerEmail.trim()))) {
+      return NextResponse.json({ error: 'That email address does not look right' }, { status: 400 });
+    }
 
-    if (!signatureImageBase64 || !signatureImageBase64.startsWith('data:image/')) {
+    if (typeof signatureImageBase64 !== 'string' || signatureImageBase64.length > MAX_SIGNATURE_CHARS || !SIGNATURE_PATTERN.test(signatureImageBase64)) {
       return NextResponse.json({ error: 'Valid signature image is required' }, { status: 400 });
     }
 
@@ -155,14 +167,13 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 2. Lock contract state
-      const updatedContract = await tx.contract.update({
-        where: { id: contract.id },
-        data: {
-          isSigned: true,
-          signedAt: signedUtcTimestamp,
-        },
+      // 2. Lock contract state. Only one signature can win if two arrive at the same moment.
+      const locked = await tx.contract.updateMany({
+        where: { id: contract.id, isSigned: false },
+        data: { isSigned: true, signedAt: signedUtcTimestamp },
       });
+      if (locked.count === 0) throw new AlreadySigned();
+      const updatedContract = await tx.contract.findUniqueOrThrow({ where: { id: contract.id } });
 
       // 3. Advance invoice from DRAFT to SENT if applicable
       if (contract.invoice.status === 'DRAFT') {
@@ -183,6 +194,9 @@ export async function POST(request: NextRequest) {
       signedAt: signedUtcTimestamp,
     });
   } catch (error) {
+    if (error instanceof AlreadySigned || (typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002')) {
+      return NextResponse.json({ error: 'This contract has already been signed and sealed.' }, { status: 400 });
+    }
     console.error('Sign contract error:', error);
     return NextResponse.json({ error: 'Internal server error while processing signature' }, { status: 500 });
   }

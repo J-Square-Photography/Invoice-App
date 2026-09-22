@@ -52,7 +52,8 @@ export async function proxy(request: NextRequest) {
   }
 
   // Redirect authenticated users away from login page
-  if (pathname === '/login') {
+  // (a login link marked ?expired=1 is left alone: it is how someone whose account was deactivated gets out of a loop)
+  if (pathname === '/login' && !request.nextUrl.searchParams.has('expired')) {
     const token = request.cookies.get(COOKIE_NAME)?.value;
     if (token) {
       try {

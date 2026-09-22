@@ -126,7 +126,8 @@ export function renderContractTemplate(
   for (const [key, val] of Object.entries(merged)) {
     const stringVal = val !== undefined && val !== null ? String(val) : '';
     const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-    rendered = rendered.replace(regex, stringVal);
+    // A function replacer, so $ characters in a name or title are never treated as replacement patterns
+    rendered = rendered.replace(regex, () => stringVal);
   }
 
   return rendered;

@@ -58,6 +58,9 @@ export async function POST(request: NextRequest) {
       const signatures = (await tx.signatureAudit.deleteMany()).count;
       const contracts = (await tx.contract.deleteMany()).count;
       const payments = (await tx.paymentLog.deleteMany()).count;
+      await tx.paymentReversal.deleteMany();
+      await tx.quoteItem.deleteMany();
+      const quotes = (await tx.quote.deleteMany()).count;
       await tx.invoiceItem.deleteMany();
       const invoices = (await tx.invoice.deleteMany()).count;
       let projects = 0;
@@ -66,7 +69,7 @@ export async function POST(request: NextRequest) {
         projects = (await tx.project.deleteMany()).count;
         clients = (await tx.client.deleteMany()).count;
       }
-      return { signatures, contracts, payments, invoices, projects, clients };
+      return { signatures, contracts, payments, invoices, quotes, projects, clients };
     });
 
     console.warn(

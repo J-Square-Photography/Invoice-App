@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
-import { defaultPaymentConfig } from '@/lib/payment-config';
+import { defaultPaymentConfig, usesSamplePaymentDetails, SAMPLE_DETAILS_MESSAGE } from '@/lib/payment-config';
 import { getCompanySettings, toPublicPaymentConfig } from '@/lib/company-settings';
 import { makeSnapshot, parseSnapshot, resolveCompany, snapshotForDb } from '@/lib/payment-snapshot';
 import { MANUAL_STATUSES, deriveStatus, toCents } from '@/lib/invoice-status';
@@ -170,7 +170,11 @@ export async function PATCH(
 
     const updateData: Record<string, unknown> = {};
     if (status !== undefined) updateData.status = unvoidStatus ?? status;
-    if (dueDate !== undefined) updateData.dueDate = new Date(dueDate);
+    if (dueDate !== undefined) {
+      const due = new Date(dueDate);
+      if (Number.isNaN(due.getTime())) return NextResponse.json({ error: 'Invalid due date' }, { status: 400 });
+      updateData.dueDate = due;
+    }
     if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
     if (notes !== undefined) updateData.notes = notes || null;
     if (changesProject) updateData.projectId = projectId;
@@ -180,9 +184,14 @@ export async function PATCH(
     const existingSnapshot = parseSnapshot(existing.paymentSnapshot);
     const leavingDraft = status !== undefined && status !== 'DRAFT' && existing.status === 'DRAFT';
     if (!existingSnapshot && leavingDraft) {
-      updateData.paymentSnapshot = snapshotForDb(
-        makeSnapshot(await getCompanySettings(), paymentMethod ?? existing.paymentMethod)
-      );
+      const live = await getCompanySettings();
+      // Sending is what tells the client where to pay, so it needs real details (voiding a draft is fine)
+      if (status === 'SENT' && usesSamplePaymentDetails(live)) {
+        return NextResponse.json({ error: SAMPLE_DETAILS_MESSAGE }, { status: 409 });
+      }
+      if (!usesSamplePaymentDetails(live)) {
+        updateData.paymentSnapshot = snapshotForDb(makeSnapshot(live, paymentMethod ?? existing.paymentMethod));
+      }
     } else if (existingSnapshot && paymentMethod === 'PAYNOW_STATIC_QR' && !existingSnapshot.staticQrDataUrl) {
       // Deliberately switching a sent invoice to the static QR: capture the QR as it is now
       const live = await getCompanySettings();

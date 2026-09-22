@@ -37,11 +37,11 @@ async function handleSweeper(request: NextRequest) {
   try {
     const now = new Date();
 
-    // 2. Query overdue invoices: due_date < NOW, status != PAID/VOID, balanceDue > 0
+    // 2. Query overdue invoices: due_date < NOW, status SENT/PARTIAL, balanceDue > 0
     const rawOverdue = await prisma.invoice.findMany({
       where: {
         dueDate: { lt: now },
-        status: { notIn: ['PAID', 'VOID'] },
+        status: { in: ['SENT', 'PARTIAL'] }, // drafts haven't been sent, so they can't be overdue
         balanceDue: { gt: 0.001 },
       },
       include: {
@@ -65,7 +65,7 @@ async function handleSweeper(request: NextRequest) {
         invoiceNumber: inv.invoiceNumber,
         companyName: inv.project.client.companyName,
         contactName: inv.project.client.contactName,
-        clientEmail: inv.project.client.email,
+        clientEmail: inv.project.client.email || 'no email on file',
         projectTitle: inv.project.title,
         totalAmount: inv.totalAmount,
         paidAmount: inv.paidAmount,

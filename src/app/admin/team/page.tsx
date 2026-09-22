@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
+import { formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/refresh-button';
 import { Input } from '@/components/ui/input';
@@ -367,7 +368,7 @@ export default function TeamPage() {
                         </Badge>
                       </td>
                       <td className="py-3 text-neutral-600">
-                        {new Date(member.createdAt).toLocaleDateString()}
+                        {formatDate(member.createdAt)}
                       </td>
                       <td className="py-3 text-right">
                         <div className="flex justify-end items-center gap-1">

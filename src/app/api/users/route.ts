@@ -51,6 +51,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return NextResponse.json({ error: 'Enter a valid email address' }, { status: 400 });
+    }
+    if (typeof password !== 'string' || password.length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters long' }, { status: 400 });
+    }
+    if (typeof name !== 'string' || !name.trim()) {
+      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+    }
+
     // Validate role
     const validRole = role === ROLES.SUPER_ADMIN ? ROLES.SUPER_ADMIN : ROLES.MANAGER;
 
@@ -72,7 +82,7 @@ export async function POST(request: NextRequest) {
       data: {
         email: email.toLowerCase().trim(),
         password: hashedPassword,
-        name,
+        name: name.trim(),
         role: validRole,
       },
       select: {

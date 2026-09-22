@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCompanySettings } from '@/lib/company-settings';
+import { usesSamplePaymentDetails, SAMPLE_DETAILS_MESSAGE } from '@/lib/payment-config';
 import { makeSnapshot, parseSnapshot, resolveCompany, snapshotForDb } from '@/lib/payment-snapshot';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
@@ -94,6 +95,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
     }
 
+    // A contract is a legal document: it must not be made while the company details are still samples
+    if (usesSamplePaymentDetails(resolveCompany(invoice, await getCompanySettings()))) {
+      return NextResponse.json({ error: SAMPLE_DETAILS_MESSAGE }, { status: 409 });
+    }
+
     let finalBody = contractBody;
     let finalTitle = title;
 
@@ -109,7 +115,7 @@ export async function POST(request: NextRequest) {
         company_uen: company.uen,
         studio_name: company.companyName.toUpperCase(),
         company_name: invoice.project.client.companyName,
-        client_name: invoice.project.client.contactName,
+        client_name: invoice.project.client.contactName || invoice.project.client.companyName,
         project_title: invoice.project.title,
         shoot_date: invoice.project.shootDate
           ? new Date(invoice.project.shootDate).toLocaleDateString('en-SG', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -127,14 +133,20 @@ export async function POST(request: NextRequest) {
 
     // Creating a contract freezes the invoice's payment details (if not already frozen)
     if (!parseSnapshot(invoice.paymentSnapshot)) {
-      await prisma.invoice.update({
-        where: { id: invoice.id },
-        data: { paymentSnapshot: snapshotForDb(makeSnapshot(await getCompanySettings(), invoice.paymentMethod)) },
-      });
+      const live = await getCompanySettings();
+      // (sample details are never frozen in: they would stay wrong after Settings is filled in)
+      if (!usesSamplePaymentDetails(live)) {
+        await prisma.invoice.update({
+          where: { id: invoice.id },
+          data: { paymentSnapshot: snapshotForDb(makeSnapshot(live, invoice.paymentMethod)) },
+        });
+      }
     }
 
     const signingToken = generateSigningToken();
-    const tokenExpiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
+    // Signing links last 1 to 365 days (30 unless told otherwise)
+    const days = Math.min(365, Math.max(1, Math.round(Number(expiresInDays) || 30)));
+    const tokenExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
     const contract = await prisma.contract.create({
       data: {

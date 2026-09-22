@@ -17,9 +17,12 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { InvoiceFormDialog } from '@/components/invoice-form-dialog';
-import { cn } from '@/lib/utils';
-import { Loader2, Pencil, Trash2, CheckCircle2, FileText, Plus } from 'lucide-react';
+import { cn, formatDate } from '@/lib/utils';
+import { Loader2, Pencil, Trash2, CheckCircle2, FileText, Plus, ClipboardList } from 'lucide-react';
+import { QuoteStatusBadge } from '@/components/quote-status-badge';
 import { ServiceTagPicker, ServiceTagBadges } from '@/components/service-tag-picker';
+import { DeleteImpactWarning } from '@/components/delete-impact';
+import type { DeleteImpact } from '@/lib/delete-impact';
 
 type Project = {
   id: string;
@@ -33,7 +36,9 @@ type Project = {
   createdAt: string;
   client: { id: string; companyName: string; contactName: string };
   invoices: any[];
+  quotes?: any[];
 };
+
 
 const PIPELINE_STEPS = [
   { key: 'INQUIRY', label: 'Inquiry' },
@@ -58,12 +63,14 @@ export function ProjectDetailDialog({
   const { toast } = useToast();
 
   const [project, setProject] = useState<Project | null>(null);
+  const [impact, setImpact] = useState<DeleteImpact | null>(null);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [form, setForm] = useState<{ title: string; serviceTags: string[]; shootDate: string; notes: string }>({ title: '', serviceTags: [], shootDate: '', notes: '' });
   const [isSaving, setIsSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchProject = async (id: string) => {
@@ -73,6 +80,7 @@ export function ProjectDetailDialog({
       if (!res.ok) throw new Error('Failed to load project');
       const data = await res.json();
       setProject(data.project);
+      setImpact(data.impact ?? null);
     } catch {
       toast({ title: 'Error', description: 'Failed to load project details', variant: 'destructive' });
       onClose();
@@ -140,14 +148,14 @@ export function ProjectDetailDialog({
           notes: form.notes,
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to update details');
       const data = await res.json();
       setProject((prev) => (prev ? { ...prev, ...data.project } : data.project));
       setMode('view');
       onChanged();
       toast({ title: 'Success', description: 'Project details updated' });
-    } catch {
-      toast({ title: 'Error', description: 'Failed to update details', variant: 'destructive' });
+    } catch (e) {
+      toast({ title: 'Could not save', description: e instanceof Error ? e.message : 'Failed to update details', variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
@@ -234,7 +242,7 @@ export function ProjectDetailDialog({
               <DialogHeader>
                 <DialogTitle>{project.title}</DialogTitle>
                 <DialogDescription>
-                  Created {new Date(project.createdAt).toLocaleDateString()}
+                  Created {formatDate(project.createdAt)}
                 </DialogDescription>
               </DialogHeader>
 
@@ -286,7 +294,7 @@ export function ProjectDetailDialog({
                   </div><div className="space-y-1">
                     <Label>Shoot Date</Label>
                     <div className="font-medium">
-                      {project.shootDate ? new Date(project.shootDate).toLocaleDateString() : 'Not scheduled'}
+                      {project.shootDate ? formatDate(project.shootDate) : 'Not scheduled'}
                     </div>
                   </div>
                 </div>
@@ -296,6 +304,38 @@ export function ProjectDetailDialog({
                   <div className="whitespace-pre-wrap text-sm">
                     {project.notes || <span className="text-muted-foreground italic">No notes.</span>}
                   </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="flex items-center gap-2">
+                      <ClipboardList className="h-4 w-4 text-neutral-500" /> Quotations
+                    </Label>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setQuoteOpen(true)}>
+                      <Plus className="mr-1.5 h-4 w-4" /> New Quotation
+                    </Button>
+                  </div>
+                  {project.quotes && project.quotes.length > 0 ? (
+                    <div className="grid gap-2">
+                      {project.quotes.map((q: any) => (
+                        <Link
+                          key={q.id}
+                          href={`/admin/quotes/${q.id}`}
+                          className="rounded-lg border p-3 bg-neutral-50 hover:bg-neutral-100 transition-colors"
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm font-semibold font-mono">{q.quoteNumber}</span>
+                            <span className="text-xs font-semibold">SGD ${Number(q.totalAmount ?? 0).toFixed(2)}</span>
+                          </div>
+                          <div className="mt-1">
+                            <QuoteStatusBadge status={q.status} validUntil={q.validUntil} />
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-neutral-500">No quotations yet.</p>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -369,15 +409,16 @@ export function ProjectDetailDialog({
           <DialogHeader>
             <DialogTitle>Delete this project?</DialogTitle>
             <DialogDescription>
-              This action cannot be undone. This will permanently delete <strong>{project?.title}</strong>.
+              This cannot be undone. <strong>{project?.title}</strong> will be permanently deleted.
             </DialogDescription>
           </DialogHeader>
+          <DeleteImpactWarning impact={impact} />
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={isDeleting}>
               Cancel
             </Button>
             <Button variant="destructive" onClick={deleteProject} disabled={isDeleting}>
-              {isDeleting ? 'Deleting...' : 'Delete Project'}
+              {isDeleting ? 'Deleting...' : (impact && impact.invoices + impact.quotes + impact.payments + impact.contracts > 0 ? 'Delete Project and Everything Linked' : 'Delete Project')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -385,6 +426,16 @@ export function ProjectDetailDialog({
       <InvoiceFormDialog
         open={invoiceOpen}
         onOpenChange={setInvoiceOpen}
+        defaultProjectId={projectId ?? undefined}
+        onSaved={() => {
+          if (projectId) fetchProject(projectId);
+          onChanged();
+        }}
+      />
+      <InvoiceFormDialog
+        kind="quote"
+        open={quoteOpen}
+        onOpenChange={setQuoteOpen}
         defaultProjectId={projectId ?? undefined}
         onSaved={() => {
           if (projectId) fetchProject(projectId);

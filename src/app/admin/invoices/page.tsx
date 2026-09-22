@@ -32,30 +32,14 @@ import {
   CheckCircle2,
   Clock,
   Trash2,
-  Sparkles,
+  Copy,
+  FileSpreadsheet,
 } from 'lucide-react';
-import { INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
-import {
-  PHOTOBOOTH_PACKAGES,
-  PHOTOBOOTH_CATEGORIES,
-  PhotoboothPackage,
-  getPresetById,
-} from '@/lib/photobooth-presets';
-
-interface LineItemInput {
-  description: string;
-  quantity: number;
-  unitPrice: number;
-}
-
-interface ProjectOption {
-  id: string;
-  title: string;
-  client: {
-    companyName: string;
-    contactName: string;
-  };
-}
+import { INVOICE_STATUS_LABELS } from '@/lib/constants';
+import { isOverdue } from '@/lib/invoice-status';
+import { downloadCsv } from '@/lib/csv';
+import { SortSelect, PeriodSelect, useSavedChoice } from '@/components/sort-filter';
+import { byDate, byNumber, byText, inPeriod, sortItems, PERIODS, type SortChoice } from '@/lib/sorting';
 
 interface InvoiceListItem {
   id: string;
@@ -77,12 +61,24 @@ interface InvoiceListItem {
       id: string;
       companyName: string;
       contactName: string;
-      email: string;
+      email: string | null;
     };
   };
   paymentLogs: Array<{ id: string }>;
   contract: { id: string; isSigned: boolean } | null;
 }
+
+const SORT_CHOICES: SortChoice<InvoiceListItem>[] = [
+  { value: 'newest', label: 'Issue Date: Newest to Oldest', compare: byDate((i) => i.issueDate, 'desc') },
+  { value: 'oldest', label: 'Issue Date: Oldest to Newest', compare: byDate((i) => i.issueDate, 'asc') },
+  { value: 'due-soon', label: 'Due Date: Soonest to Latest', compare: byDate((i) => i.dueDate, 'asc') },
+  { value: 'due-late', label: 'Due Date: Latest to Soonest', compare: byDate((i) => i.dueDate, 'desc') },
+  { value: 'amount-high', label: 'Amount: Highest to Lowest', compare: byNumber((i) => i.totalAmount, 'desc') },
+  { value: 'amount-low', label: 'Amount: Lowest to Highest', compare: byNumber((i) => i.totalAmount, 'asc') },
+  { value: 'balance-high', label: 'Balance Due: Highest to Lowest', compare: byNumber((i) => i.balanceDue, 'desc') },
+  { value: 'client-az', label: 'Client Name: A to Z', compare: byText((i) => i.project.client.companyName) },
+  { value: 'client-za', label: 'Client Name: Z to A', compare: byText((i) => i.project.client.companyName, 'desc') },
+];
 
 export default function InvoicesPage() {
   const { toast } = useToast();
@@ -90,6 +86,14 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [sort, setSort] = useSavedChoice('invoices-sort', 'newest', SORT_CHOICES.map((c) => c.value));
+  const [period, setPeriod] = useSavedChoice('invoices-period', 'ALL', PERIODS.map((p) => p.value));
+
+  // Links such as the dashboard's "Overdue" card open this page pre-filtered (?status=OVERDUE)
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('status');
+    if (wanted && ['DRAFT', 'SENT', 'PARTIAL', 'PAID', 'VOID', 'OVERDUE'].includes(wanted)) setStatusFilter(wanted);
+  }, []);
 
   // Create / edit invoice pop-up
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -100,7 +104,8 @@ export default function InvoicesPage() {
     try {
       const params = new URLSearchParams();
       if (query) params.append('q', query);
-      if (status && status !== 'ALL') params.append('status', status);
+      // "Overdue" is worked out from the due date, so it is filtered below rather than by the server
+      if (status && status !== 'ALL' && status !== 'OVERDUE') params.append('status', status);
 
       const res = await fetch(`/api/invoices?${params.toString()}`);
       if (res.ok) {
@@ -148,17 +153,56 @@ export default function InvoicesPage() {
   };
 
 
+  const handleDuplicate = async (invoiceId: string, invoiceNumber: string) => {
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/duplicate`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to duplicate invoice.');
+      toast({ title: 'Duplicated', description: `Copied ${invoiceNumber} into draft ${data.invoice.invoiceNumber}.` });
+      fetchInvoices(search, statusFilter);
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Failed to duplicate invoice.', variant: 'destructive' });
+    }
+  };
+
+  const visibleInvoices = sortItems(
+    invoices.filter((inv) => (statusFilter !== 'OVERDUE' || isOverdue(inv.status, inv.dueDate)) && inPeriod(inv.issueDate, period)),
+    SORT_CHOICES,
+    sort
+  );
+
+  const exportCsv = () => {
+    const rows: Array<Array<string | number | null>> = [
+      ['Invoice #', 'Status', 'Client', 'Project', 'Issue date', 'Due date', 'Subtotal', 'Discount', 'GST', 'Total', 'Paid', 'Balance due'],
+      ...visibleInvoices.map((inv) => [
+        inv.invoiceNumber,
+        isOverdue(inv.status, inv.dueDate) ? 'OVERDUE' : inv.status,
+        inv.project.client.companyName,
+        inv.project.title,
+        inv.issueDate.slice(0, 10),
+        inv.dueDate.slice(0, 10),
+        inv.subtotal.toFixed(2),
+        ((inv as unknown as { discountAmount?: number }).discountAmount ?? 0).toFixed(2),
+        inv.gstAmount.toFixed(2),
+        inv.totalAmount.toFixed(2),
+        inv.paidAmount.toFixed(2),
+        inv.balanceDue.toFixed(2),
+      ]),
+    ];
+    downloadCsv(`invoices-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+  };
+
   // Metrics
-  const totalInvoiced = invoices.reduce((sum, inv) => sum + (inv.status !== 'VOID' ? inv.totalAmount : 0), 0);
-  const totalPaid = invoices.reduce((sum, inv) => sum + (inv.status !== 'VOID' ? inv.paidAmount : 0), 0);
-  const totalOutstanding = invoices.reduce((sum, inv) => sum + (inv.status !== 'VOID' ? inv.balanceDue : 0), 0);
-  const overdueCount = invoices.filter(
-    (inv) => inv.status !== 'PAID' && inv.status !== 'VOID' && new Date(inv.dueDate) < new Date()
-  ).length;
+  // Drafts and voided invoices haven't been billed, so they don't count as invoiced
+  const isBilled = (status: string) => status !== 'VOID' && status !== 'DRAFT';
+  const totalInvoiced = invoices.reduce((sum, inv) => sum + (isBilled(inv.status) ? inv.totalAmount : 0), 0);
+  const totalPaid = invoices.reduce((sum, inv) => sum + (isBilled(inv.status) ? inv.paidAmount : 0), 0);
+  // Drafts haven't been sent, so they are not money anyone owes yet
+  const totalOutstanding = invoices.reduce((sum, inv) => sum + (inv.status === 'SENT' || inv.status === 'PARTIAL' ? inv.balanceDue : 0), 0);
+  const overdueCount = invoices.filter((inv) => isOverdue(inv.status, inv.dueDate)).length;
 
   const getStatusBadge = (status: string, dueDateStr: string) => {
-    const isOverdue = status !== 'PAID' && status !== 'VOID' && new Date(dueDateStr) < new Date();
-    if (isOverdue) {
+    if (isOverdue(status, dueDateStr)) {
       return <Badge variant="destructive">Overdue</Badge>;
     }
     switch (status) {
@@ -179,21 +223,26 @@ export default function InvoicesPage() {
           <div className="flex items-center gap-2"><h1 className="text-2xl font-bold tracking-tight">Invoices & Financials</h1><RefreshButton onRefresh={() => fetchInvoices(search, statusFilter)} /></div>
           <p className="text-neutral-500">Track invoices, milestone partial payments, and PayNow SGQR codes</p>
         </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className="mr-2 h-4 w-4" /> Create Invoice
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportCsv} disabled={visibleInvoices.length === 0} title="Download the invoices shown below as a spreadsheet (CSV)">
+            <FileSpreadsheet className="mr-2 h-4 w-4" /> Export CSV
+          </Button>
+          <Button onClick={openCreateDialog}>
+            <Plus className="mr-2 h-4 w-4" /> Create Invoice
+          </Button>
+        </div>
       </div>
 
       {/* Metrics Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-neutral-500">Total Invoiced</CardTitle>
             <DollarSign className="h-4 w-4 text-neutral-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">SGD ${totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            <p className="text-xs text-neutral-500">{invoices.filter(i => i.status !== 'VOID').length} active invoices</p>
+            <div className="text-lg sm:text-2xl font-bold">SGD ${totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <p className="text-xs text-neutral-500">{invoices.filter(i => isBilled(i.status)).length} issued invoices</p>
           </CardContent>
         </Card>
 
@@ -203,7 +252,7 @@ export default function InvoicesPage() {
             <Clock className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">SGD ${totalOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div className="text-lg sm:text-2xl font-bold text-amber-600">SGD ${totalOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             <p className="text-xs text-neutral-500">Pending client clearance</p>
           </CardContent>
         </Card>
@@ -214,7 +263,7 @@ export default function InvoicesPage() {
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">SGD ${totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div className="text-lg sm:text-2xl font-bold text-emerald-600">SGD ${totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             <p className="text-xs text-neutral-500">Payments recorded to date</p>
           </CardContent>
         </Card>
@@ -225,14 +274,14 @@ export default function InvoicesPage() {
             <AlertCircle className={`h-4 w-4 ${overdueCount > 0 ? 'text-red-500' : 'text-neutral-400'}`} />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${overdueCount > 0 ? 'text-red-600' : 'text-neutral-900'}`}>{overdueCount}</div>
+            <div className={`text-lg sm:text-2xl font-bold ${overdueCount > 0 ? 'text-red-600' : 'text-neutral-900'}`}>{overdueCount}</div>
             <p className="text-xs text-neutral-500">Passed payment due date</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Filters Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
           <Input
@@ -242,8 +291,12 @@ export default function InvoicesPage() {
             className="pl-9"
           />
         </div>
-        <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1">
-          {['ALL', 'DRAFT', 'SENT', 'PARTIAL', 'PAID', 'VOID'].map((s) => (
+        <div className="flex flex-wrap gap-2">
+          <SortSelect value={sort} onChange={setSort} options={SORT_CHOICES} />
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
+        <div className="flex gap-2 w-full overflow-x-auto pb-1">
+          {['ALL', 'DRAFT', 'SENT', 'PARTIAL', 'PAID', 'OVERDUE', 'VOID'].map((s) => (
             <Button
               key={s}
               variant={statusFilter === s ? 'default' : 'outline'}
@@ -251,7 +304,7 @@ export default function InvoicesPage() {
               onClick={() => setStatusFilter(s)}
               className="text-xs whitespace-nowrap"
             >
-              {s === 'ALL' ? 'All Invoices' : INVOICE_STATUS_LABELS[s] || s}
+              {s === 'ALL' ? 'All Invoices' : s === 'OVERDUE' ? `Overdue${overdueCount > 0 ? ` (${overdueCount})` : ''}` : INVOICE_STATUS_LABELS[s] || s}
             </Button>
           ))}
         </div>
@@ -264,7 +317,7 @@ export default function InvoicesPage() {
             <div className="flex justify-center items-center py-16">
               <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
             </div>
-          ) : invoices.length === 0 ? (
+          ) : visibleInvoices.length === 0 ? (
             <div className="text-center py-16 px-4">
               <FileText className="mx-auto h-12 w-12 text-neutral-300" />
               <h3 className="mt-2 text-sm font-semibold text-neutral-900">No invoices found</h3>
@@ -292,9 +345,9 @@ export default function InvoicesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
-                  {invoices.map((inv) => (
+                  {visibleInvoices.map((inv) => (
                     <tr key={inv.id} className="hover:bg-neutral-50 transition-colors">
-                      <td className="py-3.5 px-4 font-mono font-medium text-neutral-900">
+                      <td className="py-3.5 px-4 font-mono font-medium text-neutral-900 whitespace-nowrap">
                         <Link href={`/admin/invoices/${inv.id}`} className="hover:underline text-blue-600">
                           {inv.invoiceNumber}
                         </Link>
@@ -333,6 +386,15 @@ export default function InvoicesPage() {
                             onClick={() => openEditDialog(inv)}
                           >
                             <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs px-2"
+                            title="Duplicate into a new draft"
+                            onClick={() => handleDuplicate(inv.id, inv.invoiceNumber)}
+                          >
+                            <Copy className="h-3.5 w-3.5" />
                           </Button>
                           <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener noreferrer">
                             <Button variant="ghost" size="sm" className="h-8 text-xs px-2" title="Download PDF">
