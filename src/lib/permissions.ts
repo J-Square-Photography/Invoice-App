@@ -29,7 +29,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, { name: string; descriptio
 };
 
 /** Day-to-day operational areas. Deliberately excludes Settings (bank/PayNow details) and Contracts. */
-export const ESSENTIALS_PERMISSIONS: PermissionKey[] = ['clients', 'projects', 'quotes', 'invoices', 'payments'];
+export const ESSENTIALS_PERMISSIONS: PermissionKey[] = ['clients', 'projects', 'quotes', 'invoices', 'payments', 'alerts'];
 
 export const ALL_PERMISSIONS: PermissionKey[] = [...PERMISSION_KEYS];
 
