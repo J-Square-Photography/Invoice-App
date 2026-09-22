@@ -538,26 +538,31 @@ export default function InvoiceDetailPage() {
               <CardTitle className="text-base">Line Items & Financial Breakdown</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500">
-                    <th className="py-2.5 px-4">Description</th>
-                    <th className="py-2.5 px-4 text-center w-16">Qty</th>
-                    <th className="py-2.5 px-4 text-right w-28">Unit Price</th>
-                    <th className="py-2.5 px-4 text-right w-28">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {invoice.items.map((item) => (
-                    <tr key={item.id}>
-                      <td className="py-3 px-4 text-neutral-900">{item.description}</td>
-                      <td className="py-3 px-4 text-center text-neutral-600">{item.quantity}</td>
-                      <td className="py-3 px-4 text-right text-neutral-600 whitespace-nowrap">{item.amount === 0 ? '-' : `SGD $${item.unitPrice.toFixed(2)}`}</td>
-                      <td className="py-3 px-4 text-right font-medium text-neutral-900 whitespace-nowrap">{item.amount === 0 ? 'Included' : `SGD $${item.amount.toFixed(2)}`}</td>
+              {/* Four columns of padded, non-wrapping cells don't fit a phone width: without a
+                  scroll container, the Amount column was being silently clipped by the card's own
+                  rounded corners instead of just requiring a scroll to see it. */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[420px]">
+                  <thead>
+                    <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500">
+                      <th className="py-2.5 px-4">Description</th>
+                      <th className="py-2.5 px-4 text-center w-16">Qty</th>
+                      <th className="py-2.5 px-4 text-right w-28">Unit Price</th>
+                      <th className="py-2.5 px-4 text-right w-28">Amount</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100">
+                    {invoice.items.map((item) => (
+                      <tr key={item.id}>
+                        <td className="py-3 px-4 text-neutral-900">{item.description}</td>
+                        <td className="py-3 px-4 text-center text-neutral-600">{item.quantity}</td>
+                        <td className="py-3 px-4 text-right text-neutral-600 whitespace-nowrap">{item.amount === 0 ? '-' : `SGD $${item.unitPrice.toFixed(2)}`}</td>
+                        <td className="py-3 px-4 text-right font-medium text-neutral-900 whitespace-nowrap">{item.amount === 0 ? 'Included' : `SGD $${item.amount.toFixed(2)}`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
               {/* Totals Breakdown */}
               <div className="border-t border-neutral-200 p-4 bg-neutral-50 space-y-2 text-sm">

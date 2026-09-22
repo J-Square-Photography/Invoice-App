@@ -546,7 +546,9 @@ export function InvoiceFormDialog({
             <div className="space-y-2">
               {items.map((item, idx) => (
                 <div key={idx} className="bg-neutral-50 p-2.5 rounded-md border border-neutral-200 space-y-1.5">
-                  <div className="flex gap-2 items-start">
+                  {/* Description gets its own full-width row on a phone - squeezed alongside Qty and
+                      Price's fixed widths, there's barely room left to see what's being typed. */}
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-start">
                     <div className="flex-1 space-y-1">
                       <Input
                         placeholder="Service description (e.g. Commercial Shoot)"
@@ -557,43 +559,45 @@ export function InvoiceFormDialog({
                         className="h-8 text-xs bg-white"
                       />
                     </div>
-                    <div className="w-20 space-y-1">
-                      <Input
-                        type="number"
-                        min="1"
-                        placeholder="Qty"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
-                        required
-                        disabled={lockAmounts}
-                        className="h-8 text-xs bg-white text-center"
-                      />
+                    <div className="flex gap-2">
+                      <div className="w-20 shrink-0 space-y-1">
+                        <Input
+                          type="number"
+                          min="1"
+                          placeholder="Qty"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
+                          required
+                          disabled={lockAmounts}
+                          className="h-8 text-xs bg-white text-center"
+                        />
+                      </div>
+                      <div className="w-28 sm:w-32 shrink-0 space-y-1">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Price (SGD)"
+                          aria-label="Line price in SGD"
+                          value={item.amount || ''}
+                          onChange={(e) => updateItem(idx, 'amount', e.target.value)}
+                          required
+                          disabled={lockAmounts}
+                          className="h-8 text-xs bg-white text-right"
+                        />
+                      </div>
+                      {items.length > 1 && !lockAmounts && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeItem(idx)}
+                          className="h-8 w-8 p-0 shrink-0 text-neutral-400 hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
-                    <div className="w-32 space-y-1">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="Price (SGD)"
-                        aria-label="Line price in SGD"
-                        value={item.amount || ''}
-                        onChange={(e) => updateItem(idx, 'amount', e.target.value)}
-                        required
-                        disabled={lockAmounts}
-                        className="h-8 text-xs bg-white text-right"
-                      />
-                    </div>
-                    {items.length > 1 && !lockAmounts && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeItem(idx)}
-                        className="h-8 w-8 p-0 text-neutral-400 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
                   </div>
 
                   {!lockAmounts && (

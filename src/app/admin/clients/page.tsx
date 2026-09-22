@@ -133,7 +133,7 @@ function ClientsPageInner() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 max-w-md">
+        <div className="relative w-full sm:w-80">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"

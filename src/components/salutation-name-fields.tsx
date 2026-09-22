@@ -41,7 +41,7 @@ export function SalutationNameFields({
   return (
     <div className="space-y-2 sm:col-span-2">
       <Label htmlFor={`${idPrefix}-firstName`}>Contact Person <FieldTag /></Label>
-      <div className="grid grid-cols-[5.5rem_1fr_1fr] gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-[5.5rem_1fr_1fr] gap-2">
         <Select
           aria-label="Salutation"
           value={otherMode ? 'OTHER' : value.salutation}

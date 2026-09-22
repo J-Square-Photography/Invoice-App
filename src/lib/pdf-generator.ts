@@ -2,7 +2,7 @@ import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
 import { defaultPaymentConfig, type CompanyPaymentConfig } from './payment-config';
 import { generatePayNowPayload, generatePayNowQRDataURL } from './sgqr';
 import { discountName, discountTerms } from './invoice-calculations';
-import { loadUnicodeFonts, splitRuns, hasNonBasic } from './pdf-unicode';
+import { loadUnicodeFonts, splitRuns } from './pdf-unicode';
 
 export interface InvoicePDFData {
   /** Quotations reuse this layout: no payment details or QR, and dueDate is the valid-until date. */
@@ -110,6 +110,39 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     while (out.length > 1 && measure(out, size, font) > maxWidth) out = out.slice(0, -1);
     return out === s ? out : `${out.trimEnd()}...`;
   };
+  /** Like `fit`, but for text that must never be cut short (a client's name on an invoice): shrinks
+   * the font size in half-point steps instead of the text, down to `minSize`, so a long name stays
+   * fully legible just smaller rather than truncated with "...". Only falls back to truncating if
+   * even `minSize` doesn't fit (a name so long no reasonable size would help). */
+  const fitSize = (s: string, naturalSize: number, font: Font, maxWidth: number, minSize = 7): { text: string; size: number } => {
+    let size = naturalSize;
+    while (size > minSize && measure(s, size, font) > maxWidth) size -= 0.5;
+    if (measure(s, size, font) <= maxWidth) return { text: s, size };
+    return { text: fit(s, size, font, maxWidth), size };
+  };
+  /** For a client's name: shrinks to fit one line first (like `fitSize`), and if it's still too
+   * wide even at `minSize`, wraps across up to `maxLines` lines at that size instead of cutting it
+   * short. Only truncates with "..." as an absolute last resort, when even that doesn't fit. */
+  const fitNameBlock = (
+    s: string,
+    naturalSize: number,
+    font: Font,
+    maxWidth: number,
+    minSize: number,
+    maxLines: number
+  ): { lines: string[]; size: number } => {
+    let size = naturalSize;
+    while (size > minSize && measure(s, size, font) > maxWidth) size -= 0.5;
+    if (measure(s, size, font) <= maxWidth) return { lines: [s], size };
+
+    size = minSize;
+    const wrapped = wrap(s, size, font, maxWidth);
+    if (wrapped.length <= maxLines) return { lines: wrapped, size };
+
+    const lines = wrapped.slice(0, maxLines);
+    lines[maxLines - 1] = fit(`${lines[maxLines - 1]} ${wrapped.slice(maxLines).join(' ')}`, size, font, maxWidth);
+    return { lines, size };
+  };
   const wrap = (s: string, size: number, font: Font, maxWidth: number): string[] => {
     const words = s.split(/\s+/).filter(Boolean);
     const lines: string[] = [];
@@ -123,8 +156,10 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
         current = '';
         if (measure(word, size, font) <= maxWidth) {
           current = word;
-        } else if (hasNonBasic(word)) {
-          // Chinese/Japanese have no spaces: break between characters instead of cutting the text off
+        } else {
+          // A single "word" too wide for a whole line on its own - Chinese/Japanese text with no
+          // spaces, or a long email/URL with nowhere else to break - is broken between characters
+          // instead of being cut off, so nothing is ever silently lost to an ellipsis here.
           for (const ch of Array.from(word)) {
             if (current && measure(current + ch, size, font) > maxWidth) {
               lines.push(current);
@@ -132,9 +167,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
             }
             current += ch;
           }
-        } else {
-          // a single very long word is cut to fit rather than overflowing
-          current = fit(word, size, font, maxWidth);
         }
       }
     }
@@ -170,16 +202,24 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   // ============ 1. TOP BAND + HEADER ============
   fillBox(M, H - 48, CW, 8, accentRed);
 
-  text(cfg.companyName.toUpperCase(), M, H - 82, 20, fontBold, black);
+  // The studio's own name, shrunk to fit rather than overlapping the right-aligned block if it's long
+  const studioName = fitSize(cfg.companyName.toUpperCase(), 20, fontBold, CW - 230, 11);
+  text(studioName.text, M, H - 82, studioName.size, fontBold, black);
   text('PHOTOGRAPHY  \u00B7  VIDEOGRAPHY  \u00B7  PHOTOBOOTH', M, H - 96, 7.5, fontRegular, lightGray);
 
   // Company block, right-aligned. The GST registration number appears once one is set in Settings.
+  const ADDR_MAX_LINES = 3;
+  const addrWrapped = cfg.address ? wrap(cfg.address, 8.5, fontRegular, 210) : [];
+  const addrLines = addrWrapped.slice(0, ADDR_MAX_LINES);
+  if (addrWrapped.length > ADDR_MAX_LINES) {
+    addrLines[ADDR_MAX_LINES - 1] = fit(`${addrLines[ADDR_MAX_LINES - 1]} ${addrWrapped.slice(ADDR_MAX_LINES).join(' ')}`, 8.5, fontRegular, 210);
+  }
   const companyLines = [
     `UEN: ${cfg.uen}`,
     ...(cfg.gstRegNo ? [`GST Reg No: ${cfg.gstRegNo}`] : []),
     'contact@jsquarephotography.com',
     // The business address from Settings; plain 'Singapore' until one is set
-    ...(cfg.address ? wrap(cfg.address, 8.5, fontRegular, 210).slice(0, 2) : ['Singapore']),
+    ...(cfg.address ? addrLines : ['Singapore']),
   ];
   companyLines.forEach((line, i) => textRight(line, RIGHT, H - 72 - i * 11, 8.5, fontRegular, darkGray));
 
@@ -203,11 +243,38 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   // ============ 3. INFORMATION STRIP ============
   const stripTop = H - 188;
-  // The client's address (optional) adds up to two lines under their contact details
-  const clientAddressLines = data.client.address ? wrap(data.client.address, 8.5, fontRegular, 190 - 20).slice(0, 2) : [];
-  const stripH = 76 + clientAddressLines.length * 11;
   const c1 = 190; // column widths: Invoice To | Project | Dates
   const c2 = 195;
+  // The client's name and contact details always appear in full: shrunk to fit one line where
+  // possible, and wrapped onto extra lines (rather than cut short with "...") for anything too long
+  // even for that. A client's own legal name is exactly the kind of detail an invoice can't get wrong.
+  const clientName = fitNameBlock(data.client.companyName, 11, fontBold, c1 - 20, 8, 3);
+  const nameExtraLines = clientName.lines.length - 1;
+  // Contact details are all optional, so only the ones that exist are drawn
+  const contactBlocks = [
+    data.client.contactName?.trim() ? `Attn: ${data.client.contactName.trim()}` : '',
+    data.client.email?.trim() ? `Email: ${data.client.email.trim()}` : '',
+    data.client.phone?.trim() ? `Phone: ${data.client.phone.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .map((line) => fitNameBlock(line, 9, fontRegular, c1 - 20, 6.5, 3));
+  const contactExtraLines = contactBlocks.reduce((sum, b) => sum + (b.lines.length - 1), 0);
+  // The client's address (optional) adds up to a few lines under their contact details. Unlike the
+  // name/contact fields it isn't shrunk to fit (a slightly longer box reads better than tinier
+  // print here), but a rare address too long even for that still gets a visible "..." rather than
+  // being silently cut off with no sign anything is missing.
+  const ADDRESS_MAX_LINES = 3;
+  const addressWrapped = data.client.address ? wrap(data.client.address, 8.5, fontRegular, 190 - 20) : [];
+  const clientAddressLines = addressWrapped.slice(0, ADDRESS_MAX_LINES);
+  if (addressWrapped.length > ADDRESS_MAX_LINES) {
+    clientAddressLines[ADDRESS_MAX_LINES - 1] = fit(
+      `${clientAddressLines[ADDRESS_MAX_LINES - 1]} ${addressWrapped.slice(ADDRESS_MAX_LINES).join(' ')}`,
+      8.5,
+      fontRegular,
+      190 - 20
+    );
+  }
+  const stripH = 76 + nameExtraLines * 13 + contactExtraLines * 10 + clientAddressLines.length * 11;
   const x2 = M + c1;
   const x3 = M + c1 + c2;
   edgeBox(M, stripTop - stripH, CW, stripH);
@@ -216,17 +283,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   const label = (s: string, x: number, y: number) => text(s, x, y, 7.5, fontBold, accentRed);
   label(isQuote ? 'QUOTATION FOR' : 'INVOICE TO', M + 10, stripTop - 15);
-  text(fit(data.client.companyName, 11, fontBold, c1 - 20), M + 10, stripTop - 31, 11, fontBold, black);
-  // Contact details are all optional, so only the ones that exist are drawn
-  const contactLines = [
-    data.client.contactName?.trim() ? `Attn: ${data.client.contactName.trim()}` : '',
-    data.client.email?.trim() ? `Email: ${data.client.email.trim()}` : '',
-    data.client.phone?.trim() ? `Phone: ${data.client.phone.trim()}` : '',
-  ].filter(Boolean);
-  let contactY = stripTop - 45;
-  contactLines.forEach((line) => {
-    text(fit(line, 9, fontRegular, c1 - 20), M + 10, contactY, 9, fontRegular, darkGray);
-    contactY -= 12;
+  clientName.lines.forEach((l, i) => text(l, M + 10, stripTop - 31 - i * 13, clientName.size, fontBold, black));
+  let contactY = stripTop - 45 - nameExtraLines * 13;
+  contactBlocks.forEach((block) => {
+    block.lines.forEach((l, i) => text(l, M + 10, contactY - i * 10, block.size, fontRegular, darkGray));
+    contactY -= 12 + (block.lines.length - 1) * 10;
   });
   clientAddressLines.forEach((l, i) => text(l, M + 10, contactY - i * 11, 8.5, fontRegular, darkGray));
 
@@ -239,7 +300,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   }
   projectLines.forEach((l, i) => text(l, x2 + 10, stripTop - 31 - i * 13, 11, fontBold, black));
   if (data.client.uen) {
-    text(fit(`Client UEN: ${data.client.uen}`, 9, fontRegular, c2 - 20), x2 + 10, stripTop - 31 - projectLines.length * 13 - 3, 9, fontRegular, darkGray);
+    const uenLine = fitSize(`Client UEN: ${data.client.uen}`, 9, fontRegular, c2 - 20, 6.5);
+    text(uenLine.text, x2 + 10, stripTop - 31 - projectLines.length * 13 - 3, uenLine.size, fontRegular, darkGray);
   }
 
   label('DATES', x3 + 10, stripTop - 15);

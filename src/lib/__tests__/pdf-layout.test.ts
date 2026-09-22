@@ -176,6 +176,27 @@ describe('invoice PDF layout', () => {
     expect(text).toContain('Included');
   });
 
+  it('a very long client name wraps and shrinks to fit instead of being cut off with "..."', async () => {
+    const longName = 'Union of Telecommunications and Related Digital Services Employees of Singapore Pte Ltd';
+    const longContact = 'A Very Long Contact Person Full Name Goes Right Here Indeed';
+    const longEmail = 'somebody.with.a.remarkably.long.email.address@a-very-long-company-domain-name.example.com';
+    const bytes = await generateInvoicePDF(
+      invoice({
+        overrides: {
+          client: { companyName: longName, contactName: longContact, email: longEmail, phone: '+65 8888 8888', uen: '201912345A' },
+        },
+      })
+    );
+    // Wrapped text lands in separate Tj chunks (one per drawn line), so it comes back with a
+    // newline wherever a line broke - including, for an unbreakable string like an email with no
+    // spaces of its own, mid-word. Strip whitespace entirely before checking it's all still there.
+    const squashed = pdfText(bytes).replace(/\s+/g, '');
+    expect(squashed).toContain(longName.replace(/\s+/g, ''));
+    expect(squashed).toContain(longContact.replace(/\s+/g, ''));
+    expect(squashed).toContain(longEmail.replace(/\s+/g, ''));
+    expect(await pageCount(bytes)).toBe(1);
+  });
+
   it('an invoice that does not charge GST is a plain Invoice', async () => {
     const text = pdfText(await generateInvoicePDF(invoice({ overrides: { isGstApplied: false, gstAmount: 0, company: { ...COMPANY, gstRegNo: 'M90376150R' } } })));
     expect(text).not.toContain('Tax Invoice');

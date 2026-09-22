@@ -37,6 +37,14 @@ type Preset = 'ALL' | 'ESSENTIALS' | 'CUSTOM';
 
 /** Which preset a given permission list matches, so re-opening Edit shows the right button selected
  * instead of always falling back to Custom. */
+/** The short "Access to all / Essentials only / Custom (N)" caption shown under a Manager's role badge. */
+function accessLabel(member: { permissions: string[] }): string {
+  const preset = presetFor(member.permissions || []);
+  if (preset === 'ALL') return 'Access to all';
+  if (preset === 'ESSENTIALS') return 'Essentials only';
+  return `Custom (${member.permissions?.length ?? 0})`;
+}
+
 function presetFor(permissions: string[]): Preset {
   const set = new Set(permissions);
   if (ALL_PERMISSIONS.every((k) => set.has(k)) && set.size === ALL_PERMISSIONS.length) return 'ALL';
@@ -461,91 +469,152 @@ export default function TeamPage() {
               <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200">
-                    <th className="pb-3 text-left font-medium text-neutral-500">Name</th>
-                    <th className="pb-3 text-left font-medium text-neutral-500">Email</th>
-                    <th className="pb-3 text-left font-medium text-neutral-500">Role</th>
-                    <th className="pb-3 text-left font-medium text-neutral-500">Status</th>
-                    <th className="pb-3 text-left font-medium text-neutral-500">Joined</th>
-                    <th className="pb-3 text-right font-medium text-neutral-500">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {users.map((member) => (
-                    <tr key={member.id} className="hover:bg-neutral-50">
-                      <td className="py-3 font-medium">{member.name}</td>
-                      <td className="py-3 text-neutral-600">{member.email}</td>
-                      <td className="py-3">
-                        <Badge variant={member.role === 'SUPER_ADMIN' ? 'default' : 'secondary'}>
-                          {member.role === 'SUPER_ADMIN' ? (
-                            <><ShieldCheck className="mr-1 h-3 w-3" /> Developer</>
-                          ) : (
-                            <><Shield className="mr-1 h-3 w-3" /> Manager</>
+            <>
+              {/* Table: comfortable at desktop widths, but six columns squeezed onto a phone read as
+                  clipped fragments even with horizontal scroll - a stacked card reads better there. */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-neutral-200">
+                      <th className="pb-3 text-left font-medium text-neutral-500">Name</th>
+                      <th className="pb-3 text-left font-medium text-neutral-500">Email</th>
+                      <th className="pb-3 text-left font-medium text-neutral-500">Role</th>
+                      <th className="pb-3 text-left font-medium text-neutral-500">Status</th>
+                      <th className="pb-3 text-left font-medium text-neutral-500">Joined</th>
+                      <th className="pb-3 text-right font-medium text-neutral-500">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100">
+                    {users.map((member) => (
+                      <tr key={member.id} className="hover:bg-neutral-50">
+                        <td className="py-3 font-medium">{member.name}</td>
+                        <td className="py-3 text-neutral-600">{member.email}</td>
+                        <td className="py-3">
+                          <Badge variant={member.role === 'SUPER_ADMIN' ? 'default' : 'secondary'}>
+                            {member.role === 'SUPER_ADMIN' ? (
+                              <><ShieldCheck className="mr-1 h-3 w-3" /> Developer</>
+                            ) : (
+                              <><Shield className="mr-1 h-3 w-3" /> Manager</>
+                            )}
+                          </Badge>
+                          {member.role !== 'SUPER_ADMIN' && (
+                            <p className="mt-1 text-[11px] text-neutral-400">{accessLabel(member)}</p>
                           )}
-                        </Badge>
-                        {member.role !== 'SUPER_ADMIN' && (
-                          <p className="mt-1 text-[11px] text-neutral-400">
-                            {(() => {
-                              const preset = presetFor(member.permissions || []);
-                              if (preset === 'ALL') return 'Access to all';
-                              if (preset === 'ESSENTIALS') return 'Essentials only';
-                              return `Custom (${member.permissions?.length ?? 0})`;
-                            })()}
-                          </p>
+                        </td>
+                        <td className="py-3">
+                          <Badge variant={member.isActive ? 'success' : 'destructive'}>
+                            {member.isActive ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </td>
+                        <td className="py-3 text-neutral-600">
+                          {formatDate(member.createdAt)}
+                        </td>
+                        <td className="py-3 text-right">
+                          <div className="flex justify-end items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs h-8 px-2 text-neutral-700 hover:text-neutral-900"
+                              title="Edit Member Details"
+                              onClick={() => openEditDialog(member)}
+                            >
+                              <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                            </Button>
+                            {member.id !== user?.userId ? (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs h-8"
+                                  onClick={() => toggleActive(member.id, member.isActive)}
+                                >
+                                  {member.isActive ? 'Deactivate' : 'Activate'}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  title="Permanently Remove Member"
+                                  onClick={() => handleDeleteMember(member.id, member.name)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            ) : (
+                              <span className="text-xs text-neutral-400 italic pr-2">(You)</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Card list: same data and actions, stacked instead of squeezed into columns */}
+              <div className="sm:hidden divide-y divide-neutral-100">
+                {users.map((member) => (
+                  <div key={member.id} className="py-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{member.name}</p>
+                        <p className="text-neutral-600 text-xs truncate">{member.email}</p>
+                      </div>
+                      <Badge variant={member.isActive ? 'success' : 'destructive'} className="shrink-0">
+                        {member.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant={member.role === 'SUPER_ADMIN' ? 'default' : 'secondary'}>
+                        {member.role === 'SUPER_ADMIN' ? (
+                          <><ShieldCheck className="mr-1 h-3 w-3" /> Developer</>
+                        ) : (
+                          <><Shield className="mr-1 h-3 w-3" /> Manager</>
                         )}
-                      </td>
-                      <td className="py-3">
-                        <Badge variant={member.isActive ? 'success' : 'destructive'}>
-                          {member.isActive ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </td>
-                      <td className="py-3 text-neutral-600">
-                        {formatDate(member.createdAt)}
-                      </td>
-                      <td className="py-3 text-right">
-                        <div className="flex justify-end items-center gap-1">
+                      </Badge>
+                      {member.role !== 'SUPER_ADMIN' && (
+                        <span className="text-[11px] text-neutral-400">{accessLabel(member)}</span>
+                      )}
+                      <span className="text-[11px] text-neutral-400">Joined {formatDate(member.createdAt)}</span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs h-8 px-2 text-neutral-700 hover:text-neutral-900"
+                        title="Edit Member Details"
+                        onClick={() => openEditDialog(member)}
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                      </Button>
+                      {member.id !== user?.userId ? (
+                        <>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-xs h-8 px-2 text-neutral-700 hover:text-neutral-900"
-                            title="Edit Member Details"
-                            onClick={() => openEditDialog(member)}
+                            className="text-xs h-8"
+                            onClick={() => toggleActive(member.id, member.isActive)}
                           >
-                            <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                            {member.isActive ? 'Deactivate' : 'Activate'}
                           </Button>
-                          {member.id !== user?.userId ? (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-xs h-8"
-                                onClick={() => toggleActive(member.id, member.isActive)}
-                              >
-                                {member.isActive ? 'Deactivate' : 'Activate'}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-xs h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                title="Permanently Remove Member"
-                                onClick={() => handleDeleteMember(member.id, member.name)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
-                          ) : (
-                            <span className="text-xs text-neutral-400 italic pr-2">(You)</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Permanently Remove Member"
+                            onClick={() => handleDeleteMember(member.id, member.name)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-neutral-400 italic">(You)</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
