@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/refresh-button';
+import { RequirePermission } from '@/components/require-permission';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -90,6 +91,14 @@ const SORT_CHOICES: SortChoice<ContractListItem>[] = [
 ];
 
 export default function ContractsPage() {
+  return (
+    <RequirePermission permission="contracts">
+      <ContractsPageInner />
+    </RequirePermission>
+  );
+}
+
+function ContractsPageInner() {
   const { toast } = useToast();
   const [contracts, setContracts] = useState<ContractListItem[]>([]);
   const [loading, setLoading] = useState(true);

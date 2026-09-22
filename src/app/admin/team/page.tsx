@@ -19,16 +19,118 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { UserPlus, Shield, ShieldCheck, Loader2, Trash2, Eye, EyeOff, Pencil, AlertTriangle } from 'lucide-react';
+import { UserPlus, Shield, ShieldCheck, Loader2, Trash2, Eye, EyeOff, Pencil, AlertTriangle, Check } from 'lucide-react';
 import { ResetDataDialog } from '@/components/reset-data-dialog';
+import { PERMISSION_KEYS, PERMISSION_LABELS, ESSENTIALS_PERMISSIONS, ALL_PERMISSIONS, type PermissionKey } from '@/lib/permissions';
 
 interface TeamUser {
   id: string;
   email: string;
   name: string;
   role: string;
+  permissions: string[];
   isActive: boolean;
   createdAt: string;
+}
+
+type Preset = 'ALL' | 'ESSENTIALS' | 'CUSTOM';
+
+/** Which preset a given permission list matches, so re-opening Edit shows the right button selected
+ * instead of always falling back to Custom. */
+function presetFor(permissions: string[]): Preset {
+  const set = new Set(permissions);
+  if (ALL_PERMISSIONS.every((k) => set.has(k)) && set.size === ALL_PERMISSIONS.length) return 'ALL';
+  if (ESSENTIALS_PERMISSIONS.every((k) => set.has(k)) && set.size === ESSENTIALS_PERMISSIONS.length) return 'ESSENTIALS';
+  return 'CUSTOM';
+}
+
+/** Preset buttons (Discord-style: broad roles first, fine-grained control if you need it) plus,
+ * for Custom, a checklist of every section. Hidden entirely for the Developer role, which always
+ * has full access regardless of this list. */
+function PermissionsEditor({
+  role,
+  value,
+  onChange,
+}: {
+  role: string;
+  value: PermissionKey[];
+  onChange: (next: PermissionKey[]) => void;
+}) {
+  if (role === 'SUPER_ADMIN') {
+    return (
+      <p className="text-xs text-neutral-500 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2">
+        Developer accounts always have full access to every section, including Team management.
+      </p>
+    );
+  }
+
+  const preset = presetFor(value);
+  const choosePreset = (p: Preset) => {
+    if (p === 'ALL') onChange([...ALL_PERMISSIONS]);
+    else if (p === 'ESSENTIALS') onChange([...ESSENTIALS_PERMISSIONS]);
+    // CUSTOM: leave the current selection as-is, just switch the checklist into view
+  };
+  const toggle = (key: PermissionKey) => {
+    onChange(value.includes(key) ? value.filter((k) => k !== key) : [...value, key]);
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label>Access</Label>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Access preset">
+        {(
+          [
+            ['ALL', 'Access to All'],
+            ['ESSENTIALS', 'Essentials Only'],
+            ['CUSTOM', 'Custom'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={preset === id}
+            onClick={() => choosePreset(id)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+              preset === id ? 'border-neutral-900 bg-neutral-100 text-neutral-900' : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {preset === 'CUSTOM' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 rounded-lg border border-neutral-200 p-2.5">
+          {PERMISSION_KEYS.map((key) => {
+            const checked = value.includes(key);
+            return (
+              <label
+                key={key}
+                className="flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-neutral-50"
+              >
+                <span
+                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                    checked ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-300'
+                  }`}
+                >
+                  {checked && <Check className="h-3 w-3" />}
+                </span>
+                <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggle(key)} />
+                <span>
+                  <span className="block font-medium text-neutral-800">{PERMISSION_LABELS[key].name}</span>
+                  <span className="block text-neutral-500">{PERMISSION_LABELS[key].description}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+      {preset !== 'CUSTOM' && (
+        <p className="text-[11px] text-neutral-400">
+          {preset === 'ALL' ? 'Every section except Team management.' : 'Clients, Projects, Quotes, Invoices and Payments.'}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default function TeamPage() {
@@ -46,6 +148,7 @@ export default function TeamPage() {
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [newRole, setNewRole] = useState('MANAGER');
+  const [newPermissions, setNewPermissions] = useState<PermissionKey[]>([...ESSENTIALS_PERMISSIONS]);
 
   // Edit Form state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -53,6 +156,7 @@ export default function TeamPage() {
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState('MANAGER');
+  const [editPermissions, setEditPermissions] = useState<PermissionKey[]>([...ESSENTIALS_PERMISSIONS]);
   const [editPassword, setEditPassword] = useState('');
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -96,6 +200,11 @@ export default function TeamPage() {
     setEditName(member.name);
     setEditEmail(member.email);
     setEditRole(member.role);
+    setEditPermissions(
+      member.permissions && member.permissions.length > 0
+        ? (member.permissions as PermissionKey[])
+        : [...ESSENTIALS_PERMISSIONS]
+    );
     setEditPassword('');
     setShowEditPassword(false);
     setEditDialogOpen(true);
@@ -111,6 +220,7 @@ export default function TeamPage() {
         name: editName,
         email: editEmail,
         role: editRole,
+        permissions: editPermissions,
       };
       if (editPassword.trim()) {
         payload.password = editPassword.trim();
@@ -152,6 +262,7 @@ export default function TeamPage() {
           email: newEmail,
           password: newPassword,
           role: newRole,
+          permissions: newPermissions,
         }),
       });
 
@@ -169,6 +280,7 @@ export default function TeamPage() {
       setNewPassword('');
       setShowPassword(false);
       setNewRole('MANAGER');
+      setNewPermissions([...ESSENTIALS_PERMISSIONS]);
       fetchUsers();
     } catch {
       toast('Network error', 'error');
@@ -304,6 +416,7 @@ export default function TeamPage() {
                   <option value="SUPER_ADMIN">Developer</option>
                 </Select>
               </div>
+              <PermissionsEditor role={newRole} value={newPermissions} onChange={setNewPermissions} />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                   Cancel
@@ -361,6 +474,16 @@ export default function TeamPage() {
                             <><Shield className="mr-1 h-3 w-3" /> Manager</>
                           )}
                         </Badge>
+                        {member.role !== 'SUPER_ADMIN' && (
+                          <p className="mt-1 text-[11px] text-neutral-400">
+                            {(() => {
+                              const preset = presetFor(member.permissions || []);
+                              if (preset === 'ALL') return 'Access to all';
+                              if (preset === 'ESSENTIALS') return 'Essentials only';
+                              return `Custom (${member.permissions?.length ?? 0})`;
+                            })()}
+                          </p>
+                        )}
                       </td>
                       <td className="py-3">
                         <Badge variant={member.isActive ? 'success' : 'destructive'}>
@@ -491,6 +614,7 @@ export default function TeamPage() {
                 <p className="text-[11px] text-neutral-400">You cannot demote your own Developer role.</p>
               )}
             </div>
+            <PermissionsEditor role={editRole} value={editPermissions} onChange={setEditPermissions} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
                 Cancel

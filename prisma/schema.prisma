@@ -13,9 +13,16 @@ model User {
   password            String
   name                String
   role                String    @default("MANAGER") // SUPER_ADMIN or MANAGER
+  // Which sections a MANAGER can see/use (see src/lib/permissions.ts). Ignored for SUPER_ADMIN,
+  // who always has full access including Team management, which is not itself delegable.
+  permissions         String[]  @default([])
   isActive            Boolean   @default(true)
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
+  // Forgot-password flow: a hash of the single-use link's token (never the raw token itself,
+  // same reasoning as password hashing) plus when it stops being valid.
+  resetTokenHash      String?
+  resetTokenExpiresAt DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 

@@ -10,6 +10,7 @@ import { PROJECT_TYPE_LABELS, INVOICE_STATUS_LABELS } from '@/lib/constants';
 import { getCompanySettings } from '@/lib/company-settings';
 import { usesSamplePaymentDetails } from '@/lib/payment-config';
 import { getCurrentUser } from '@/lib/auth';
+import { hasPermission } from '@/lib/permissions';
 import { startOfSingaporeDay, startOfSingaporeMonth, startOfSingaporeYear } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
@@ -24,10 +25,10 @@ export default async function DashboardPage() {
   let openQuotes: any[] = [];
   let unverifiedPayments = 0;
   let usingSampleDetails = false;
-  let isDeveloper = false;
+  let canOpenSettings = false;
   try {
     usingSampleDetails = usesSamplePaymentDetails(await getCompanySettings());
-    isDeveloper = (await getCurrentUser())?.role === 'SUPER_ADMIN';
+    canOpenSettings = hasPermission(await getCurrentUser(), 'settings');
   } catch {
     // the dashboard still loads without this notice
   }
@@ -210,7 +211,7 @@ export default async function DashboardPage() {
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
           <strong>Set your real company details before sending any invoice.</strong> The UEN and bank account are still the built-in
           samples, so invoices and PayNow QR codes would point clients to the wrong account. Invoices can&apos;t be marked Sent until this is fixed.{' '}
-          {isDeveloper ? (
+          {canOpenSettings ? (
             <Link href="/admin/settings" className="font-semibold underline">Open Settings →</Link>
           ) : (
             'Ask a Developer to fill in Settings.'

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { hasPermission } from '@/lib/permissions';
 import { rankClients } from '@/lib/search-rank';
 import { composeContactName } from '@/lib/client-name';
 
@@ -14,8 +15,12 @@ export async function GET(request: NextRequest) {
   const q = searchParams.get('q') || '';
   const limit = searchParams.get('limit');
 
-  // If limit is set, return slim results for autocomplete
+  // The slim autocomplete path also backs the client picker inside "Create New Project", so it's
+  // allowed for either permission; the full list below is the actual Clients section.
   if (limit) {
+    if (!hasPermission(user, 'clients') && !hasPermission(user, 'projects')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const wanted = Math.min(Math.max(parseInt(limit, 10) || 8, 1), 25);
     // Pull a wider candidate set, then rank so the best matches (names starting with
     // what was typed) come first before cutting down to the requested number.
@@ -34,6 +39,8 @@ export async function GET(request: NextRequest) {
     const clients = rankClients(candidates, q).slice(0, wanted);
     return NextResponse.json({ clients });
   }
+
+  if (!hasPermission(user, 'clients')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const clients = await prisma.client.findMany({
     where: q ? {
@@ -56,6 +63,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  // Allowed from the Clients page (clients) or from the inline "Create new client" button while
+  // creating a project (projects) — see src/app/admin/projects/page.tsx.
+  if (!hasPermission(user, 'clients') && !hasPermission(user, 'projects')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   try {
     const body = await request.json();

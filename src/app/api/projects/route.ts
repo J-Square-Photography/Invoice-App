@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { hasPermission } from '@/lib/permissions';
 import { cleanTags, legacyTypeForTags } from '@/lib/service-tags';
 import { isPipelineStatus, parseOptionalDate, cleanTitle } from '@/lib/project-validation';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  // Also backs the project picker inside the Invoice/Quote form (see invoice-form-dialog.tsx),
+  // so anyone who can create one of those needs read access here too.
+  if (!hasPermission(user, 'projects') && !hasPermission(user, 'invoices') && !hasPermission(user, 'quotes')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
@@ -45,6 +51,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!hasPermission(user, 'projects')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
     const body = await request.json();

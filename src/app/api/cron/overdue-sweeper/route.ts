@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { hasPermission } from '@/lib/permissions';
 import {
   OverdueReport,
   OverdueInvoiceItem,
@@ -32,6 +33,9 @@ async function handleSweeper(request: NextRequest) {
       { error: 'Unauthorized: Valid CRON_SECRET bearer token or admin session required' },
       { status: 401 }
     );
+  }
+  if (!isCronAuthorized && user && !hasPermission(user, 'alerts')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {

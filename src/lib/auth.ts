@@ -18,6 +18,7 @@ export interface JWTPayload {
   email: string;
   role: string;
   name: string;
+  permissions?: string[];
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -70,7 +71,7 @@ export async function clearSessionCookie(): Promise<void> {
 // whatever it is now (not what it was when they logged in). Otherwise deactivating or demoting
 // someone would take up to 7 days to take effect. The lookup is cached for a few seconds.
 const USER_CACHE_MS = 15_000;
-type LiveUser = { isActive: boolean; role: string; name: string; email: string };
+type LiveUser = { isActive: boolean; role: string; name: string; email: string; permissions: string[] };
 const userCache = new Map<string, { at: number; user: LiveUser | null }>();
 
 /** Forget a cached user, e.g. right after their account was changed, so the change applies at once. */
@@ -86,7 +87,7 @@ async function lookupUser(userId: string): Promise<LiveUser | null> {
     const { prisma } = await import('@/lib/prisma');
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { isActive: true, role: true, name: true, email: true },
+      select: { isActive: true, role: true, name: true, email: true, permissions: true },
     });
     userCache.set(userId, { at: Date.now(), user });
     return user;
@@ -104,5 +105,5 @@ export async function getCurrentUser(): Promise<JWTPayload | null> {
   if (!payload?.userId) return null;
   const live = await lookupUser(payload.userId);
   if (!live || !live.isActive) return null;
-  return { userId: payload.userId, email: live.email, name: live.name, role: live.role };
+  return { userId: payload.userId, email: live.email, name: live.name, role: live.role, permissions: live.permissions };
 }

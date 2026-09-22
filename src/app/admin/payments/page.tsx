@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RefreshButton } from '@/components/refresh-button';
+import { RequirePermission } from '@/components/require-permission';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { Search, Loader2, ShieldCheck, Paperclip, FileSpreadsheet, Wallet, AlertTriangle, Copy } from 'lucide-react';
@@ -72,6 +73,14 @@ const FILTERS = [
 ] as const;
 
 export default function PaymentsPage() {
+  return (
+    <RequirePermission permission="payments">
+      <PaymentsPageInner />
+    </RequirePermission>
+  );
+}
+
+function PaymentsPageInner() {
   const { toast } = useToast();
   const [rawPayments, setPayments] = useState<PaymentRow[]>([]);
   const [sort, setSort] = useSavedChoice('payments-sort', 'newest', SORT_CHOICES.map((c) => c.value));

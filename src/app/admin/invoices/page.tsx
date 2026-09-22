@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { RequirePermission } from '@/components/require-permission';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/refresh-button';
 import { Input } from '@/components/ui/input';
@@ -81,6 +82,14 @@ const SORT_CHOICES: SortChoice<InvoiceListItem>[] = [
 ];
 
 export default function InvoicesPage() {
+  return (
+    <RequirePermission permission="invoices">
+      <InvoicesPageInner />
+    </RequirePermission>
+  );
+}
+
+function InvoicesPageInner() {
   const { toast } = useToast();
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [loading, setLoading] = useState(true);

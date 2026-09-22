@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, Plus, Eye } from 'lucide-react';
+import { Search, Plus, Eye, UserPlus } from 'lucide-react';
 import { ProjectDetailDialog } from '@/components/project-detail-dialog';
+import { AddClientDialog, type CreatedClient } from '@/components/add-client-dialog';
+import { RequirePermission } from '@/components/require-permission';
 import { rankProjects } from '@/lib/search-rank';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/refresh-button';
@@ -48,6 +50,14 @@ const SORT_CHOICES: SortChoice<Project>[] = [
 ];
 
 export default function ProjectsListPage() {
+  return (
+    <RequirePermission permission="projects">
+      <ProjectsListPageInner />
+    </RequirePermission>
+  );
+}
+
+function ProjectsListPageInner() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,6 +78,7 @@ export default function ProjectsListPage() {
   const [clientResults, setClientResults] = useState<{id: string; companyName: string; contactName: string; email: string}[]>([]);
   const [selectedClient, setSelectedClient] = useState<{id: string; companyName: string} | null>(null);
   const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [isAddClientOpen, setIsAddClientOpen] = useState(false);
   // Existing projects with a similar title, shown under the title field to avoid duplicates
   const [similarProjects, setSimilarProjects] = useState<Project[]>([]);
 
@@ -345,6 +356,16 @@ export default function ProjectsListPage() {
         onChanged={fetchProjects}
       />
 
+      <AddClientDialog
+        open={isAddClientOpen}
+        onOpenChange={setIsAddClientOpen}
+        initialCompanyName={clientSearch}
+        onCreated={(client: CreatedClient) => {
+          setSelectedClient({ id: client.id, companyName: client.companyName });
+          setClientSearch('');
+        }}
+      />
+
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -383,23 +404,42 @@ export default function ProjectsListPage() {
                     onFocus={() => setShowClientDropdown(true)}
                     onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
                   />
-                  {showClientDropdown && clientResults.length > 0 && (
+                  {showClientDropdown && (clientResults.length > 0 || clientSearch.trim()) && (
                     <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow-lg max-h-60 overflow-auto">
                       {clientResults.map(c => (
                         <button
                           key={c.id}
                           type="button"
                           className="w-full px-3 py-2 text-left text-sm hover:bg-neutral-100 flex flex-col sm:flex-row sm:items-center sm:justify-between"
-                          onClick={() => { 
-                            setSelectedClient({ id: c.id, companyName: c.companyName }); 
-                            setShowClientDropdown(false); 
-                            setClientSearch(''); 
+                          onClick={() => {
+                            setSelectedClient({ id: c.id, companyName: c.companyName });
+                            setShowClientDropdown(false);
+                            setClientSearch('');
                           }}
                         >
                           <span className="font-medium">{c.companyName}</span>
                           <span className="text-neutral-500 text-xs sm:text-sm sm:ml-2">{c.contactName}</span>
                         </button>
                       ))}
+                      {clientSearch.trim() && (
+                        <button
+                          type="button"
+                          className={cn(
+                            'flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-primary hover:bg-neutral-100',
+                            clientResults.length > 0 && 'border-t'
+                          )}
+                          // onMouseDown (not onClick) fires before the search input's onBlur, so the
+                          // dropdown doesn't close itself out from under this button first
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setShowClientDropdown(false);
+                            setIsAddClientOpen(true);
+                          }}
+                        >
+                          <UserPlus className="h-4 w-4" />
+                          Create new client "{clientSearch.trim()}"
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

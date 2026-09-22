@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/refresh-button';
+import { RequirePermission } from '@/components/require-permission';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
@@ -55,6 +56,14 @@ interface SweeperResult {
 }
 
 export default function AlertsPage() {
+  return (
+    <RequirePermission permission="alerts">
+      <AlertsPageInner />
+    </RequirePermission>
+  );
+}
+
+function AlertsPageInner() {
   const { toast } = useToast();
   const [running, setRunning] = useState(false);
   const [sweeperData, setSweeperData] = useState<SweeperResult | null>(null);

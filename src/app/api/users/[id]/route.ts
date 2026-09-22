@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser, hashPassword, invalidateUserCache } from '@/lib/auth';
 import { ROLES } from '@/lib/constants';
+import { ESSENTIALS_PERMISSIONS, sanitizePermissions } from '@/lib/permissions';
 
 export async function PATCH(
   request: NextRequest,
@@ -21,7 +22,7 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { name, email, role, isActive, password } = body;
+    const { name, email, role, isActive, password, permissions } = body;
 
     // Nobody can lock themselves out: no deactivating or demoting your own account
     if (id === currentUser.userId && (isActive === false || (role !== undefined && role !== ROLES.SUPER_ADMIN))) {
@@ -54,7 +55,17 @@ export async function PATCH(
       updateData.email = normalizedEmail;
     }
 
-    if (role !== undefined) updateData.role = role === ROLES.SUPER_ADMIN ? ROLES.SUPER_ADMIN : ROLES.MANAGER;
+    if (role !== undefined) {
+      const nextRole = role === ROLES.SUPER_ADMIN ? ROLES.SUPER_ADMIN : ROLES.MANAGER;
+      updateData.role = nextRole;
+      // SUPER_ADMIN ignores permissions entirely, so there's nothing meaningful to store. Demoting
+      // to MANAGER needs *some* list decided now: whatever was just submitted, or Essentials as a
+      // safe default rather than silently locking the account out of everything.
+      updateData.permissions =
+        nextRole === ROLES.SUPER_ADMIN ? [] : permissions !== undefined ? sanitizePermissions(permissions) : ESSENTIALS_PERMISSIONS;
+    } else if (permissions !== undefined) {
+      updateData.permissions = sanitizePermissions(permissions);
+    }
     if (isActive !== undefined) updateData.isActive = isActive;
     if (password && password.trim().length >= 8) {
       updateData.password = await hashPassword(password);
@@ -73,6 +84,7 @@ export async function PATCH(
         email: true,
         name: true,
         role: true,
+        permissions: true,
         isActive: true,
         createdAt: true,
       },

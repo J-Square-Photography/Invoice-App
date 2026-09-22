@@ -1,12 +1,14 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
+import { hasPermission, type PermissionKey } from '@/lib/permissions';
 
 interface User {
   userId: string;
   email: string;
   name: string;
   role: string;
+  permissions: string[];
 }
 
 interface AuthContextType {
@@ -14,6 +16,8 @@ interface AuthContextType {
   loading: boolean;
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
+  /** True for SUPER_ADMIN always; for MANAGER, true only if the key is in their granted list. */
+  can: (key: PermissionKey) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -21,6 +25,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   refresh: async () => {},
   logout: async () => {},
+  can: () => false,
 });
 
 export function useAuth() {
@@ -76,8 +81,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const can = (key: PermissionKey) => hasPermission(user, key);
+
   return (
-    <AuthContext.Provider value={{ user, loading, refresh: fetchUser, logout }}>
+    <AuthContext.Provider value={{ user, loading, refresh: fetchUser, logout, can }}>
       {children}
     </AuthContext.Provider>
   );

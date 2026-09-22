@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { ROLES } from '@/lib/constants';
+import { hasPermission } from '@/lib/permissions';
 import { getStorageStatus } from '@/lib/payment-proof';
 
 /**
@@ -12,6 +13,7 @@ import { getStorageStatus } from '@/lib/payment-proof';
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!hasPermission(user, 'payments')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { searchParams } = new URL(request.url);
   const month = searchParams.get('month');

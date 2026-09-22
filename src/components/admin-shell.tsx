@@ -28,28 +28,35 @@ import { Button } from '@/components/ui/button';
 import { LogoToggle } from '@/components/logo-toggle';
 import { GlobalSearch } from '@/components/global-search';
 import { AppearanceButton } from '@/components/appearance-dialog';
+import type { PermissionKey } from '@/lib/permissions';
 
-const navigation = [
-  { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { name: 'Clients', href: '/admin/clients', icon: Users },
-  { name: 'Projects', href: '/admin/projects', icon: FolderKanban },
-  { name: 'Quotes', href: '/admin/quotes', icon: ClipboardList },
-  { name: 'Invoices', href: '/admin/invoices', icon: FileText },
-  { name: 'Payments', href: '/admin/payments', icon: Wallet },
-  { name: 'Contracts', href: '/admin/contracts', icon: FileSignature },
-  { name: 'Alerts', href: '/admin/alerts', icon: Bell },
+// `permission: null` means always visible to any signed-in account (just the Dashboard landing page).
+const navigation: Array<{ name: string; href: string; icon: typeof LayoutDashboard; permission: PermissionKey | null }> = [
+  { name: 'Dashboard', href: '/admin', icon: LayoutDashboard, permission: null },
+  { name: 'Clients', href: '/admin/clients', icon: Users, permission: 'clients' },
+  { name: 'Projects', href: '/admin/projects', icon: FolderKanban, permission: 'projects' },
+  { name: 'Quotes', href: '/admin/quotes', icon: ClipboardList, permission: 'quotes' },
+  { name: 'Invoices', href: '/admin/invoices', icon: FileText, permission: 'invoices' },
+  { name: 'Payments', href: '/admin/payments', icon: Wallet, permission: 'payments' },
+  { name: 'Contracts', href: '/admin/contracts', icon: FileSignature, permission: 'contracts' },
+  { name: 'Alerts', href: '/admin/alerts', icon: Bell, permission: 'alerts' },
 ];
 
-const adminNavigation = [
-  { name: 'Team', href: '/admin/team', icon: UserCog },
-  { name: 'Settings', href: '/admin/settings', icon: Settings },
-];
+function adminNavItems(showSettings: boolean, showTeam: boolean) {
+  const items: Array<{ name: string; href: string; icon: typeof Settings; developerOnly: boolean }> = [];
+  if (showSettings) items.push({ name: 'Settings', href: '/admin/settings', icon: Settings, developerOnly: false });
+  if (showTeam) items.push({ name: 'Team', href: '/admin/team', icon: UserCog, developerOnly: true });
+  return items;
+}
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const pathname = usePathname();
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, can } = useAuth();
+  const visibleNav = navigation.filter((item) => item.permission === null || can(item.permission));
+  const showTeam = user?.role === 'SUPER_ADMIN';
+  const showSettings = can('settings');
 
   // Close mobile drawer automatically when route changes
   useEffect(() => {
@@ -116,7 +123,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-neutral-400">
             Menu
           </p>
-          {navigation.map((item) => {
+          {visibleNav.map((item) => {
             const isActive =
               pathname === item.href ||
               (item.href !== '/admin' && pathname.startsWith(item.href));
@@ -138,12 +145,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           })}
 
           {/* Admin Section */}
-          {(!user || user.role === 'SUPER_ADMIN') && (
+          {(showTeam || showSettings) && (
             <>
               <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-neutral-400">
                 Administration
               </p>
-              {adminNavigation.map((item) => {
+              {adminNavItems(showSettings, showTeam).map((item) => {
                 const isActive = pathname.startsWith(item.href);
                 return (
                   <Link
@@ -160,9 +167,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       <item.icon className="h-4 w-4" />
                       {item.name}
                     </div>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded">
-                      Developer
-                    </span>
+                    {item.developerOnly && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wider bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded">
+                        Developer
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -238,7 +247,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
             Navigation
           </p>
-          {navigation.map((item) => {
+          {visibleNav.map((item) => {
             const isActive =
               pathname === item.href ||
               (item.href !== '/admin' && pathname.startsWith(item.href));
@@ -261,12 +270,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           })}
 
           {/* Admin Section */}
-          {(!user || user.role === 'SUPER_ADMIN') && (
+          {(showTeam || showSettings) && (
             <>
               <p className="mb-2 mt-6 px-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
                 Administration
               </p>
-              {adminNavigation.map((item) => {
+              {adminNavItems(showSettings, showTeam).map((item) => {
                 const isActive = pathname.startsWith(item.href);
                 return (
                   <Link
@@ -284,16 +293,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       <item.icon className="h-4 w-4 shrink-0" />
                       {item.name}
                     </div>
-                    <span
-                      className={cn(
-                        'text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded',
-                        isActive
-                          ? 'bg-neutral-800 text-neutral-200'
-                          : 'bg-neutral-100 text-neutral-600'
-                      )}
-                    >
-                      Developer
-                    </span>
+                    {item.developerOnly && (
+                      <span
+                        className={cn(
+                          'text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded',
+                          isActive
+                            ? 'bg-neutral-800 text-neutral-200'
+                            : 'bg-neutral-100 text-neutral-600'
+                        )}
+                      >
+                        Developer
+                      </span>
+                    )}
                   </Link>
                 );
               })}

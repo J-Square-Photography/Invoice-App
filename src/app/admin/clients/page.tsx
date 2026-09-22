@@ -2,25 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { ClientDetailDialog } from '@/components/client-detail-dialog';
-import { PhoneInput } from '@/components/phone-input';
-import { SalutationNameFields, EMPTY_NAME_FIELDS, type NameFieldsValue } from '@/components/salutation-name-fields';
-import { FieldTag } from '@/components/field-tag';
+import { AddClientDialog } from '@/components/add-client-dialog';
+import { RequirePermission } from '@/components/require-permission';
 import { missingClientInfo } from '@/lib/client-info';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/refresh-button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { Search, UserPlus, Loader2, Building2, ExternalLink, FileSpreadsheet } from 'lucide-react';
 import { downloadCsv } from '@/lib/csv';
@@ -49,6 +38,14 @@ const SORT_CHOICES: SortChoice<ClientListItem>[] = [
 ];
 
 export default function ClientsPage() {
+  return (
+    <RequirePermission permission="clients">
+      <ClientsPageInner />
+    </RequirePermission>
+  );
+}
+
+function ClientsPageInner() {
   const [clients, setClients] = useState<ClientListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -58,19 +55,6 @@ export default function ClientsPage() {
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-  
-  // Form state
-  const [formData, setFormData] = useState({
-    companyName: '',
-    email: '',
-    phone: '',
-    uen: '',
-    address: '',
-    socials: '',
-    internalNotes: ''
-  });
-  const [nameFields, setNameFields] = useState<NameFieldsValue>(EMPTY_NAME_FIELDS);
 
   const { toast } = useToast();
 
@@ -118,49 +102,6 @@ export default function ClientsPage() {
     }
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setIsCreating(true);
-      const res = await fetch('/api/clients', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, ...nameFields }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to create client');
-      }
-
-      toast({
-        title: 'Success',
-        description: 'Client created successfully',
-      });
-      
-      setIsDialogOpen(false);
-      setFormData({
-        companyName: '',
-        email: '',
-        phone: '',
-        uen: '',
-        address: '',
-        socials: '',
-        internalNotes: ''
-      });
-      setNameFields(EMPTY_NAME_FIELDS);
-      fetchClients(search);
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to create client. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
   const visibleClients = sortItems(
     clients.filter((c) => (!incompleteOnly || missingClientInfo(c).length > 0) && inPeriod(c.createdAt, period)),
     SORT_CHOICES,
@@ -173,11 +114,6 @@ export default function ClientsPage() {
       ['Client / Company', 'Contact', 'Email', 'Phone', 'UEN', 'Address', 'Projects'],
       ...visibleClients.map((c) => [c.companyName, c.contactName, c.email, c.phone, c.uen, c.address, c._count?.projects ?? 0]),
     ]);
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   return (
@@ -291,58 +227,11 @@ export default function ClientsPage() {
         onChanged={() => fetchClients(search)}
       />
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add New Client</DialogTitle>
-            <DialogDescription>
-              Enter the client details below. Click save when you're done.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4 py-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="companyName">Client / Company Name <FieldTag required /></Label>
-                <Input id="companyName" name="companyName" required value={formData.companyName} onChange={handleInputChange} />
-              </div>
-              <SalutationNameFields idPrefix="new" value={nameFields} onChange={setNameFields} />
-              <div className="space-y-2">
-                <Label htmlFor="email">Email <FieldTag /></Label>
-                <Input id="email" name="email" type="email" value={formData.email} onChange={handleInputChange} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone <FieldTag /></Label>
-                <PhoneInput id="phone" value={formData.phone} onChange={(v) => setFormData((prev) => ({ ...prev, phone: v }))} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="uen">UEN <FieldTag /></Label>
-                <Input id="uen" name="uen" value={formData.uen} onChange={handleInputChange} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Address <FieldTag /></Label>
-                <Input id="address" name="address" maxLength={300} placeholder="e.g. 123 Example Road, #01-23, Singapore 123456" value={formData.address} onChange={handleInputChange} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="socials">Socials / Links <FieldTag /></Label>
-                <Input id="socials" name="socials" placeholder="e.g. instagram.com/company" value={formData.socials} onChange={handleInputChange} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="internalNotes">Internal Notes <FieldTag /></Label>
-              <Textarea id="internalNotes" name="internalNotes" rows={4} value={formData.internalNotes} onChange={handleInputChange} />
-            </div>
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isCreating}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isCreating}>
-                {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Client
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <AddClientDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        onCreated={() => fetchClients(search)}
+      />
     </div>
   );
 }

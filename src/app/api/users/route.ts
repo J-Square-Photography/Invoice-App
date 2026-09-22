@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser, hashPassword } from '@/lib/auth';
 import { ROLES } from '@/lib/constants';
+import { ESSENTIALS_PERMISSIONS, sanitizePermissions } from '@/lib/permissions';
 
 export async function GET() {
   const currentUser = await getCurrentUser();
@@ -20,6 +21,7 @@ export async function GET() {
       email: true,
       name: true,
       role: true,
+      permissions: true,
       isActive: true,
       createdAt: true,
     },
@@ -42,7 +44,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email, password, name, role } = body;
+    const { email, password, name, role, permissions } = body;
 
     if (!email || !password || !name) {
       return NextResponse.json(
@@ -63,6 +65,11 @@ export async function POST(request: NextRequest) {
 
     // Validate role
     const validRole = role === ROLES.SUPER_ADMIN ? ROLES.SUPER_ADMIN : ROLES.MANAGER;
+    // SUPER_ADMIN ignores permissions entirely (always full access); a MANAGER with no explicit
+    // list yet defaults to Essentials rather than nothing, so a freshly-created account isn't locked
+    // out of everything until someone remembers to configure it.
+    const validPermissions =
+      validRole === ROLES.SUPER_ADMIN ? [] : permissions !== undefined ? sanitizePermissions(permissions) : ESSENTIALS_PERMISSIONS;
 
     // Check if email already exists
     const existing = await prisma.user.findUnique({
@@ -84,12 +91,14 @@ export async function POST(request: NextRequest) {
         password: hashedPassword,
         name: name.trim(),
         role: validRole,
+        permissions: validPermissions,
       },
       select: {
         id: true,
         email: true,
         name: true,
         role: true,
+        permissions: true,
         isActive: true,
         createdAt: true,
       },

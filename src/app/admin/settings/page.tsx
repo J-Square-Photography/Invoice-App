@@ -441,7 +441,7 @@ function StaticQrField({
 }
 
 export default function SettingsPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, can } = useAuth();
   const { toast } = useToast();
   const [values, setValues] = useState<SettingsValues | null>(null);
   const [staticQr, setStaticQr] = useState<string | null>(null);
@@ -504,7 +504,7 @@ export default function SettingsPage() {
     );
   }
 
-  if (user?.role !== 'SUPER_ADMIN') {
+  if (!can('settings')) {
     return (
       <div className="flex items-center justify-center h-96">
         <p className="text-neutral-500">You do not have permission to access this page.</p>

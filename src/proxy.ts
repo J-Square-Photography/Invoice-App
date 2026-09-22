@@ -33,11 +33,11 @@ export async function proxy(request: NextRequest) {
         throw new Error('Invalid token payload');
       }
 
-      // Developer (SUPER_ADMIN)-only routes
-      if (
-        (pathname.startsWith('/admin/team') || pathname.startsWith('/admin/settings')) &&
-        payload.role !== 'SUPER_ADMIN'
-      ) {
+      // Team management is not delegable via permissions (see src/lib/permissions.ts), so it stays
+      // a hard edge redirect. Settings is now a regular permission (checked, with a live DB lookup,
+      // by the page itself and by /api/settings) rather than a role, so it can't be decided here from
+      // the JWT's static role claim alone.
+      if (pathname.startsWith('/admin/team') && payload.role !== 'SUPER_ADMIN') {
         return NextResponse.redirect(new URL('/admin', request.url));
       }
 

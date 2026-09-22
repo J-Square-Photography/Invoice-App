@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 
@@ -82,9 +83,20 @@ function DialogContent({
     };
   }, [open]);
 
-  if (!open) return null;
+  // Rendered through a portal straight to <body>: a `fixed inset-0` div only actually covers the
+  // viewport if none of its ancestors set a transform/filter/perspective (each creates a new
+  // containing block for `fixed` descendants). Rendering in place made this dialog a hostage of
+  // whatever happened to wrap its trigger — e.g. the mobile header's `backdrop-blur` shrank the
+  // whole overlay down to the header's own height. A portal sidesteps that regardless of where a
+  // <Dialog> is opened from.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  return (
+  if (!open || !mounted) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
@@ -110,7 +122,8 @@ function DialogContent({
         </button>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

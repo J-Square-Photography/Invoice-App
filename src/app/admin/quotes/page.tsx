@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast';
 import { InvoiceFormDialog, type EditableInvoice } from '@/components/invoice-form-dialog';
 import { QuoteStatusBadge } from '@/components/quote-status-badge';
+import { RequirePermission } from '@/components/require-permission';
 import { Search, Plus, Loader2, ClipboardList, Download, Pencil, Trash2, FileText, Clock, CheckCircle2, ArrowRightCircle } from 'lucide-react';
 import { QUOTE_STATUS_LABELS, displayQuoteStatus } from '@/lib/quote-status';
 import { downloadCsv } from '@/lib/csv';
@@ -49,6 +50,14 @@ const FILTERS = ['ALL', 'DRAFT', 'SENT', 'ACCEPTED', 'DECLINED', 'EXPIRED'] as c
 const money = (n: number) => `SGD $${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function QuotesPage() {
+  return (
+    <RequirePermission permission="quotes">
+      <QuotesPageInner />
+    </RequirePermission>
+  );
+}
+
+function QuotesPageInner() {
   const { toast } = useToast();
   const router = useRouter();
   const [quotes, setQuotes] = useState<QuoteListItem[]>([]);

@@ -6,8 +6,83 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Loader2, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { safeRedirectPath } from '@/lib/safe-redirect';
+
+function ForgotPasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const reset = () => {
+    setEmail('');
+    setLoading(false);
+    setMessage('');
+  };
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      // Always the same message, whether or not the email is registered — see the API route.
+      setMessage(data.message || "If that email is registered, we've sent a link to reset the password.");
+    } catch {
+      setMessage("If that email is registered, we've sent a link to reset the password.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Reset your password</DialogTitle>
+          <DialogDescription>Enter your account email and we'll send you a link to set a new password.</DialogDescription>
+        </DialogHeader>
+        {message ? (
+          <div className="flex flex-col items-center gap-3 py-4 text-center">
+            <CheckCircle2 className="h-8 w-8 text-green-600" />
+            <p className="text-sm text-neutral-700">{message}</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="forgot-email">Email</Label>
+              <Input
+                id="forgot-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Send reset link
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function LoginForm() {
   const router = useRouter();
@@ -19,6 +94,7 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   // Arriving with ?expired=1 means the session ended (e.g. the account was deactivated): clear the old cookie
   useEffect(() => {
@@ -78,7 +154,16 @@ function LoginForm() {
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password">Password</Label>
+          <button
+            type="button"
+            onClick={() => setForgotOpen(true)}
+            className="text-xs font-medium text-neutral-500 hover:text-neutral-900 hover:underline"
+          >
+            Forgot password?
+          </button>
+        </div>
         <div className="relative">
           <Input
             id="password"
@@ -114,6 +199,7 @@ function LoginForm() {
           'Sign In'
         )}
       </Button>
+      <ForgotPasswordDialog open={forgotOpen} onOpenChange={setForgotOpen} />
     </form>
   );
 }

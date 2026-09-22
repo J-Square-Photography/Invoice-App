@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getCurrentUser } from '@/lib/auth';
-import { ROLES } from '@/lib/constants';
+import { hasPermission } from '@/lib/permissions';
 import { getCompanySettings, toPublicPaymentConfig, SETTINGS_ROW_ID } from '@/lib/company-settings';
 import { usesSamplePaymentDetails } from '@/lib/payment-config';
 import { makeSnapshot, snapshotForDb } from '@/lib/payment-snapshot';
@@ -48,7 +48,7 @@ export async function GET() {
     hasStaticQr: !!settings.staticQrDataUrl,
     usingSampleDetails: usesSamplePaymentDetails(settings),
     // The image itself is only needed on the Settings page
-    staticQrDataUrl: user.role === ROLES.SUPER_ADMIN ? settings.staticQrDataUrl : undefined,
+    staticQrDataUrl: hasPermission(user, 'settings') ? settings.staticQrDataUrl : undefined,
     updatedAt: row?.updatedAt ?? null,
     updatedBy: row?.updatedBy ?? null,
   });
@@ -57,8 +57,8 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  if (user.role !== ROLES.SUPER_ADMIN) {
-    return NextResponse.json({ error: 'Forbidden. Developer role only.' }, { status: 403 });
+  if (!hasPermission(user, 'settings')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
