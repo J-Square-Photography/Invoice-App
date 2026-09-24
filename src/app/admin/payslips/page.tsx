@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { Plus, Loader2, Download, Trash2, X, Eye } from 'lucide-react';
+import { Plus, Loader2, Download, Trash2, X, Eye, Undo2 } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
 
@@ -116,7 +116,7 @@ function PayslipsPageInner() {
   };
 
   const markPaid = async (p: PayslipItem) => {
-    if (!confirm(`Mark this payslip for ${p.staff.name} as paid? This locks it.`)) return;
+    if (!confirm(`Mark this payslip for ${p.staff.name} as paid? This locks it. (To attach a proof screenshot, use the View page instead.)`)) return;
     try {
       const res = await fetch(`/api/payslips/${p.id}`, {
         method: 'PATCH',
@@ -125,6 +125,22 @@ function PayslipsPageInner() {
       });
       if (!res.ok) throw new Error('Failed to update');
       toast({ title: 'Updated', description: 'Payslip marked as paid.' });
+      fetchPayslips();
+    } catch {
+      toast({ title: 'Error', description: 'Failed to update payslip', variant: 'destructive' });
+    }
+  };
+
+  const revertToDraft = async (p: PayslipItem) => {
+    if (!confirm(`Revert this payslip for ${p.staff.name} back to Draft? You'll be able to edit its shifts again.`)) return;
+    try {
+      const res = await fetch(`/api/payslips/${p.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'DRAFT' }),
+      });
+      if (!res.ok) throw new Error('Failed to update');
+      toast({ title: 'Reverted', description: 'Payslip is a draft again.' });
       fetchPayslips();
     } catch {
       toast({ title: 'Error', description: 'Failed to update payslip', variant: 'destructive' });
@@ -197,13 +213,17 @@ function PayslipsPageInner() {
                         <Button variant="ghost" size="icon" title="Download PDF" onClick={() => window.open(`/api/payslips/${p.id}/pdf`, '_blank')}>
                           <Download className="h-4 w-4" />
                         </Button>
-                        {p.status === 'DRAFT' && (
+                        {p.status === 'DRAFT' ? (
                           <>
                             <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => markPaid(p)}>Mark Paid</Button>
                             <Button variant="ghost" size="icon" title="Delete draft" className="text-red-600 hover:text-red-700" onClick={() => handleDelete(p)}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </>
+                        ) : (
+                          <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => revertToDraft(p)}>
+                            <Undo2 className="mr-1 h-3.5 w-3.5" /> Revert
+                          </Button>
                         )}
                       </div>
                     </td>

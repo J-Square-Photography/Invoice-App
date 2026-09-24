@@ -22,6 +22,9 @@ interface Counts {
   payments: number;
   contracts: number;
   signatures: number;
+  staff: number;
+  timesheets: number;
+  payslips: number;
 }
 
 const CONFIRMATION_WORD = 'DELETE';
@@ -40,6 +43,7 @@ export function ResetDataDialog({
   const { toast } = useToast();
   const [counts, setCounts] = useState<Counts | null>(null);
   const [includeClients, setIncludeClients] = useState(true);
+  const [includeStaff, setIncludeStaff] = useState(false);
   const [typed, setTyped] = useState('');
   const [deleting, setDeleting] = useState(false);
 
@@ -47,6 +51,7 @@ export function ResetDataDialog({
     if (!open) return;
     setTyped('');
     setIncludeClients(true);
+    setIncludeStaff(false);
     setCounts(null);
     let cancelled = false;
     (async () => {
@@ -71,7 +76,7 @@ export function ResetDataDialog({
       const res = await fetch('/api/admin/reset-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: typed, includeClients }),
+        body: JSON.stringify({ confirm: typed, includeClients, includeStaff }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -83,7 +88,7 @@ export function ResetDataDialog({
         title: 'Blank Slate Ready',
         description: `Deleted ${d.invoices} invoices, ${d.contracts} contracts, ${d.signatures} signature records${
           includeClients ? `, ${d.projects} projects and ${d.clients} clients` : ''
-        }.`,
+        }${includeStaff ? `, ${d.staff} staff, ${d.timesheets} timesheets and ${d.payslips} payslips` : ''}.`,
       });
       onOpenChange(false);
     } catch {
@@ -100,6 +105,9 @@ export function ResetDataDialog({
     ['E-signature records', counts?.signatures, true],
     ['Projects', counts?.projects, includeClients],
     ['Clients', counts?.clients, includeClients],
+    ['Staff', counts?.staff, includeStaff],
+    ['Timesheets', counts?.timesheets, includeStaff || includeClients],
+    ['Payslips', counts?.payslips, includeStaff],
   ];
 
   return (
@@ -136,6 +144,21 @@ export function ResetDataDialog({
             />
             Also delete all clients and projects
           </label>
+
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeStaff}
+              onChange={(e) => setIncludeStaff(e.target.checked)}
+              className="rounded"
+            />
+            Also delete all staff, timesheets and payslips
+          </label>
+          {!includeStaff && includeClients && (
+            <p className="text-xs text-amber-700">
+              Staff and payslip records will be kept, but any timesheets logged against a deleted project go with it.
+            </p>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="reset-confirm">

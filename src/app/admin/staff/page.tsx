@@ -19,6 +19,7 @@ import { SkillTagPicker, type SkillCategoryOption } from '@/components/skill-tag
 import { Search, UserPlus, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { STAFF_TYPES, STAFF_TYPE_LABELS, type StaffType } from '@/lib/staff-types';
 import { SKILL_DISCIPLINES, SKILL_LEVELS, type StaffSkill, type ExtraSkillTag } from '@/lib/skill-levels';
+import { PHOTOBOOTH_SKILL_CATEGORY_NAME } from '@/lib/staff-rate-card';
 import { formatDate } from '@/lib/utils';
 
 interface StaffListItem {
@@ -88,7 +89,14 @@ function StaffPageInner() {
     try {
       const res = await fetch('/api/skill-categories');
       const data = await res.json();
-      setCustomCategories((data.categories || []).map((c: { id: string; name: string; options: string[] }) => ({ id: c.id, label: c.name, options: c.options, isCustom: true })));
+      setCustomCategories(
+        (data.categories || []).map((c: { id: string; name: string; options: string[] }) => ({
+          id: c.id,
+          label: c.name,
+          options: c.options,
+          isCustom: c.name.trim().toLowerCase() !== PHOTOBOOTH_SKILL_CATEGORY_NAME.toLowerCase(),
+        }))
+      );
     } catch {
       // Non-fatal: the built-in Photography/Videography pickers still work without custom categories.
     }

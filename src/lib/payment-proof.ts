@@ -42,11 +42,18 @@ export function storageLevel(usedRatio: number): StorageStatus['level'] {
   return 'ok';
 }
 
-/** How much of the free database allowance is used, and how much of it is payment proofs. */
+/** How much of the free database allowance is used, and how much of it is proof images (payment
+ * proofs and payslip proofs together). */
 export async function getStorageStatus(): Promise<StorageStatus> {
   const [db, proofs] = await Promise.all([
     prisma.$queryRaw<Array<{ size: bigint }>>`SELECT pg_database_size(current_database()) AS size`,
-    prisma.$queryRaw<Array<{ bytes: bigint | null; count: bigint }>>`SELECT COALESCE(SUM(octet_length(data)), 0) AS bytes, COUNT(*) AS count FROM payment_proofs`,
+    prisma.$queryRaw<Array<{ bytes: bigint | null; count: bigint }>>`
+      SELECT COALESCE(SUM(octet_length(data)), 0) AS bytes, COUNT(*) AS count FROM (
+        SELECT data FROM payment_proofs
+        UNION ALL
+        SELECT data FROM payslip_proofs
+      ) proofs
+    `,
   ]);
   const databaseBytes = Number(db[0]?.size ?? 0);
   const usedRatio = databaseBytes / FREE_DB_LIMIT_BYTES;

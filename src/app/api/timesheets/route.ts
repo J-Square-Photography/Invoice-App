@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
     include: {
       staff: { select: { id: true, name: true } },
       project: { select: { id: true, title: true, client: { select: { companyName: true } } } },
+      payslip: { select: { status: true } },
     },
     orderBy: { date: 'desc' },
   });

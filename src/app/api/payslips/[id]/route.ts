@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { computeNetPay, type PayLineItem } from '@/lib/timesheet-calculations';
 import { isPayslipStatus } from '@/lib/staff-types';
+import { parseProofDataUrl, getStorageStatus } from '@/lib/payment-proof';
 
 function cleanLineItems(value: unknown): PayLineItem[] {
   if (!Array.isArray(value)) return [];
@@ -45,10 +46,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!existing) return NextResponse.json({ error: 'Payslip not found' }, { status: 404 });
 
     const body = await request.json();
-    const { status, allowances: rawAllowances, deductions: rawDeductions, notes } = body;
+    const { status, allowances: rawAllowances, deductions: rawDeductions, notes, proofImage } = body;
 
     if ((rawAllowances !== undefined || rawDeductions !== undefined) && existing.status === 'PAID') {
       return NextResponse.json({ error: 'A paid payslip is locked. Its line items cannot be changed.' }, { status: 409 });
+    }
+
+    // An optional screenshot (e.g. of the bank transfer to the staff member) attached when marking
+    // this payslip as paid - same pattern as a client payment's proof.
+    let proof: { mime: string; data: Buffer } | null = null;
+    if (status === 'PAID' && proofImage) {
+      const parsed = parseProofDataUrl(proofImage);
+      if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+      const storage = await getStorageStatus().catch(() => null);
+      if (storage?.level === 'full') {
+        return NextResponse.json(
+          { error: 'Storage is nearly full, so new proof images are paused. Mark it paid without a screenshot instead.' },
+          { status: 507 }
+        );
+      }
+      proof = parsed;
     }
 
     const updateData: Record<string, unknown> = {};
@@ -64,6 +81,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (!isPayslipStatus(status)) return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
       updateData.status = status;
       updateData.paidAt = status === 'PAID' ? new Date() : null;
+    }
+    if (proof) {
+      updateData.proofBytes = proof.data.length;
+      updateData.proof = { upsert: { create: { mime: proof.mime, data: proof.data }, update: { mime: proof.mime, data: proof.data } } };
     }
 
     const payslip = await prisma.payslip.update({ where: { id }, data: updateData, include: { staff: true } });

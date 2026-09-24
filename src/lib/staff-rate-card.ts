@@ -92,3 +92,20 @@ export function photoboothHourlyRateFor(role: PhotoboothRole, tier: PhotoboothPa
 export function photoboothGroupLabel(role: PhotoboothRole, tier: PhotoboothPackageTier): string {
   return `Photobooth: ${role} (Package ${tier === 'A' ? 'A' : 'B/C'})`;
 }
+
+/** The name of the SkillCategory row used to tag Photobooth crew on a staff profile. Unlike other
+ * admin-defined categories, this one can't be deleted (see /api/skill-categories/[id]) because the
+ * Photobooth discipline/pay logic above is hardcoded around it. */
+export const PHOTOBOOTH_SKILL_CATEGORY_NAME = 'DSLR Photobooth';
+
+/** One payslip breakdown row's label for a logged shift, given its (possibly missing) discipline
+ * and snapshotted rate - shared between generating a payslip and recomputing one after a shift is
+ * removed from it, so the label logic never drifts between the two call sites. */
+export function shiftGroupLabel(discipline: string | null, hourlyRate: number, photoboothPackage?: string | null): string {
+  if (discipline && isSkillDiscipline(discipline)) return groupLabelFor(discipline, hourlyRate);
+  if (discipline && isPhotoboothDiscipline(discipline) && isPhotoboothPackageTier(photoboothPackage)) {
+    return photoboothGroupLabel(photoboothRoleFromDiscipline(discipline), photoboothPackage);
+  }
+  if (discipline) return `${discipline} ($${hourlyRate.toFixed(2)}/hr)`;
+  return `Manual Rate ($${hourlyRate.toFixed(2)}/hr)`;
+}

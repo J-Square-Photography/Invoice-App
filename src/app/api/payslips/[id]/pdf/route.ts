@@ -54,7 +54,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       company,
     });
 
-    const filename = `Payslip-${payslip.staff.name.replace(/[^a-z0-9]+/gi, '-')}-${payslipNumber}.pdf`;
+    const fileDate = (d: Date) => d.toISOString().slice(0, 10);
+    const periodLabel =
+      fileDate(payslip.periodStart) === fileDate(payslip.periodEnd)
+        ? fileDate(payslip.periodStart)
+        : `${fileDate(payslip.periodStart)}_to_${fileDate(payslip.periodEnd)}`;
+    const filename = `Payslip-${payslip.staff.name.replace(/[^a-z0-9]+/gi, '-')}-${periodLabel}.pdf`;
     return new Response(pdfBytes as unknown as BodyInit, {
       status: 200,
       headers: {

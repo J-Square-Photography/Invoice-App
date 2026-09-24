@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { Plus, Loader2, Trash2, Lock, Pencil } from 'lucide-react';
+import { Plus, Loader2, Trash2, Lock, Pencil, Undo2 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { SKILL_DISCIPLINES, isSkillDiscipline, type StaffSkill } from '@/lib/skill-levels';
 import {
@@ -39,6 +39,7 @@ interface TimesheetItem {
   equipmentDropoff: boolean;
   notes: string | null;
   payslipId: string | null;
+  payslip: { status: 'DRAFT' | 'PAID' } | null;
   staff: { id: string; name: string };
   project: { id: string; title: string; client?: { companyName: string } };
 }
@@ -199,6 +200,19 @@ function TimesheetsPageInner() {
     }
   };
 
+  const handleUnbill = async (t: TimesheetItem) => {
+    if (!confirm(`Revert this shift for ${t.staff.name} back to unbilled so it can be edited? Its payslip will be recomputed (or removed if this was its only shift).`)) return;
+    try {
+      const res = await fetch(`/api/timesheets/${t.id}/unbill`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to revert shift');
+      toast({ title: 'Reverted', description: 'Shift is unbilled again and can be edited.' });
+      fetchTimesheets(unbilledOnly);
+    } catch (error) {
+      toast({ title: 'Error', description: error instanceof Error ? error.message : 'Failed to revert shift', variant: 'destructive' });
+    }
+  };
+
   const handleDelete = async (t: TimesheetItem) => {
     if (!confirm(`Delete this ${t.totalHours}h shift for ${t.staff.name}?`)) return;
     try {
@@ -272,16 +286,22 @@ function TimesheetsPageInner() {
                     </td>
                     <td className="p-4 align-middle">
                       <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={t.payslipId ? 'Locked - already on a payslip' : 'Edit'}
-                          disabled={!!t.payslipId}
-                          className="disabled:text-neutral-300"
-                          onClick={() => openEdit(t)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        {t.payslipId ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title={t.payslip?.status === 'PAID' ? 'Payslip is paid - revert it to Draft first' : 'Revert to unbilled so it can be edited'}
+                            disabled={t.payslip?.status === 'PAID'}
+                            className="disabled:text-neutral-300"
+                            onClick={() => handleUnbill(t)}
+                          >
+                            <Undo2 className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(t)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"

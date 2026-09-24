@@ -393,10 +393,27 @@ model Payslip {
   netPay        Decimal     @default(0) @db.Decimal(12, 2)
   status        String      @default("DRAFT") // DRAFT, PAID
   paidAt        DateTime?
+  // Set once a proof screenshot is attached when marking this payslip as paid (see PayslipProof) -
+  // kept alongside the actual image so the list can show a paperclip icon without a join
+  proofBytes    Int?
   notes         String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   timesheets    Timesheet[]
+  proof         PayslipProof?
 
   @@map("payslips")
+}
+
+// A screenshot/photo attached when a payslip is marked paid (e.g. proof of a bank transfer to the
+// staff member) - same pattern as PaymentProof for client payments.
+model PayslipProof {
+  id        String   @id @default(uuid())
+  payslipId String   @unique
+  payslip   Payslip  @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  mime      String
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@map("payslip_proofs")
 }

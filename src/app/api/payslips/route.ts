@@ -3,15 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { computePayFromShifts, computeNetPay, type PayLineItem, type ShiftForPay } from '@/lib/timesheet-calculations';
-import {
-  groupLabelFor,
-  isPhotoboothDiscipline,
-  isPhotoboothPackageTier,
-  photoboothRoleFromDiscipline,
-  photoboothGroupLabel,
-  PHOTOBOOTH_EQUIPMENT_FLAT_RATE,
-} from '@/lib/staff-rate-card';
-import { isSkillDiscipline } from '@/lib/skill-levels';
+import { shiftGroupLabel, PHOTOBOOTH_EQUIPMENT_FLAT_RATE } from '@/lib/staff-rate-card';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -97,18 +89,12 @@ export async function POST(request: NextRequest) {
 
     const shifts: ShiftForPay[] = timesheets.map((t) => {
       const rate = t.hourlyRate != null ? Number(t.hourlyRate) : fallbackRate!;
-      let group: string;
-      if (t.discipline && isSkillDiscipline(t.discipline)) {
-        group = groupLabelFor(t.discipline, rate);
-      } else if (t.discipline && isPhotoboothDiscipline(t.discipline) && isPhotoboothPackageTier(t.photoboothPackage)) {
-        group = photoboothGroupLabel(photoboothRoleFromDiscipline(t.discipline), t.photoboothPackage);
-      } else if (t.discipline) {
-        group = `${t.discipline} ($${rate.toFixed(2)}/hr)`;
-      } else {
-        group = `Manual Rate ($${rate.toFixed(2)}/hr)`;
-      }
-      return { hours: Number(t.totalHours), hourlyRate: rate, group };
+      return { hours: Number(t.totalHours), hourlyRate: rate, group: shiftGroupLabel(t.discipline, rate, t.photoboothPackage) };
     });
+    // A legacy shift with no snapshotted rate only had one because of the override above - write it
+    // back onto the timesheet now so the label can be recomputed accurately later without needing
+    // the original override again (see /api/timesheets/[id]/unbill).
+    const legacyTimesheetIds = timesheets.filter((t) => t.hourlyRate == null).map((t) => t.id);
 
     const pay = computePayFromShifts(shifts);
 
@@ -149,6 +135,9 @@ export async function POST(request: NextRequest) {
         where: { id: { in: timesheets.map((t) => t.id) } },
         data: { payslipId: created.id },
       });
+      if (legacyTimesheetIds.length > 0) {
+        await tx.timesheet.updateMany({ where: { id: { in: legacyTimesheetIds } }, data: { hourlyRate: fallbackRate! } });
+      }
       return created;
     });
 

@@ -7,10 +7,19 @@ import { RequirePermission } from '@/components/require-permission';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { ArrowLeft, Download, Loader2, CheckCircle, Trash2 } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, CheckCircle, Trash2, Undo2, ImagePlus, Paperclip } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { STAFF_TYPE_LABELS, type StaffType } from '@/lib/staff-types';
+import { compressPaymentProof, type CompressedProof } from '@/lib/image-compress';
 
 interface PayGroupBreakdown {
   group: string;
@@ -38,6 +47,7 @@ interface PayslipDetail {
   netPay: string | number;
   status: 'DRAFT' | 'PAID';
   paidAt: string | null;
+  proofBytes: number | null;
   notes: string | null;
   createdAt: string;
   staff: {
@@ -82,6 +92,9 @@ function PayslipDetailPageInner() {
   const [payslip, setPayslip] = useState<PayslipDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [markPaidOpen, setMarkPaidOpen] = useState(false);
+  const [proof, setProof] = useState<CompressedProof | null>(null);
+  const [proofBusy, setProofBusy] = useState(false);
 
   const fetchPayslip = useCallback(async () => {
     try {
@@ -99,17 +112,59 @@ function PayslipDetailPageInner() {
 
   useEffect(() => { fetchPayslip(); }, [fetchPayslip]);
 
-  const markPaid = async () => {
-    if (!payslip || !confirm(`Mark this payslip for ${payslip.staff.name} as paid? This locks it.`)) return;
+  const pickProof = async (file: File | undefined) => {
+    if (!file) return;
+    setProofBusy(true);
+    try {
+      const shrunk = await compressPaymentProof(file);
+      if (!shrunk.ok) {
+        toast({ title: 'Image too large', description: 'Try a smaller screenshot.', variant: 'destructive' });
+        return;
+      }
+      setProof(shrunk);
+    } catch (error) {
+      toast({ title: 'Error', description: error instanceof Error ? error.message : 'Could not process that image', variant: 'destructive' });
+    } finally {
+      setProofBusy(false);
+    }
+  };
+
+  const openMarkPaid = () => {
+    setProof(null);
+    setMarkPaidOpen(true);
+  };
+
+  const confirmMarkPaid = async () => {
     setBusy(true);
     try {
       const res = await fetch(`/api/payslips/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'PAID' }),
+        body: JSON.stringify({ status: 'PAID', proofImage: proof?.dataUrl }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to update');
+      toast({ title: 'Updated', description: 'Payslip marked as paid.' });
+      setMarkPaidOpen(false);
+      fetchPayslip();
+    } catch (error) {
+      toast({ title: 'Error', description: error instanceof Error ? error.message : 'Failed to update payslip', variant: 'destructive' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revertToDraft = async () => {
+    if (!payslip || !confirm(`Revert this payslip for ${payslip.staff.name} back to Draft? You'll be able to edit its shifts again.`)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/payslips/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'DRAFT' }),
       });
       if (!res.ok) throw new Error('Failed to update');
-      toast({ title: 'Updated', description: 'Payslip marked as paid.' });
+      toast({ title: 'Reverted', description: 'Payslip is a draft again.' });
       fetchPayslip();
     } catch {
       toast({ title: 'Error', description: 'Failed to update payslip', variant: 'destructive' });
@@ -152,21 +207,68 @@ function PayslipDetailPageInner() {
             <p className="text-sm text-muted-foreground">{formatDate(payslip.periodStart)} – {formatDate(payslip.periodEnd)}</p>
           </div>
           <Badge variant={payslip.status === 'PAID' ? 'success' : 'secondary'}>{payslip.status === 'PAID' ? 'Paid' : 'Draft'}</Badge>
+          {payslip.proofBytes ? (
+            <a href={`/api/payslips/${id}/proof`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline" title="Open the proof screenshot">
+              <Paperclip className="h-3.5 w-3.5" /> Proof
+            </a>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => window.open(`/api/payslips/${id}/pdf`, '_blank')}>
             <Download className="mr-2 h-4 w-4" /> Download PDF
           </Button>
-          {payslip.status === 'DRAFT' && (
+          {payslip.status === 'DRAFT' ? (
             <>
-              <Button onClick={markPaid} disabled={busy}><CheckCircle className="mr-2 h-4 w-4" /> Mark Paid</Button>
+              <Button onClick={openMarkPaid} disabled={busy}><CheckCircle className="mr-2 h-4 w-4" /> Mark Paid</Button>
               <Button variant="ghost" className="text-red-600 hover:text-red-700" disabled={busy} onClick={handleDelete}>
                 <Trash2 className="mr-2 h-4 w-4" /> Delete
               </Button>
             </>
+          ) : (
+            <Button variant="outline" onClick={revertToDraft} disabled={busy}>
+              <Undo2 className="mr-2 h-4 w-4" /> Revert to Draft
+            </Button>
           )}
         </div>
       </div>
+
+      <Dialog open={markPaidOpen} onOpenChange={setMarkPaidOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark Payslip as Paid</DialogTitle>
+            <DialogDescription>This locks the payslip. Optionally attach a screenshot as proof of the transfer.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              {proof ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 space-y-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={proof.dataUrl} alt="Payslip proof preview" className="max-h-64 w-full rounded border border-neutral-200 bg-white object-contain" />
+                  <div className="flex items-center justify-between gap-2 text-xs text-emerald-900">
+                    <span>Shrunk to <strong>{(proof.bytes / 1024).toFixed(0)} KB</strong> ({proof.width}×{proof.height}).</span>
+                    <Button type="button" size="sm" variant="ghost" className="h-7 shrink-0 text-xs" onClick={() => setProof(null)}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed border-neutral-300 px-3 py-4 text-center text-sm text-neutral-600 hover:bg-neutral-50">
+                  {proofBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImagePlus className="h-5 w-5 text-neutral-400" />}
+                  <span>{proofBusy ? 'Shrinking the image...' : 'Choose a screenshot or photo (optional)'}</span>
+                  <input type="file" accept="image/*" className="hidden" disabled={proofBusy} onChange={(e) => { pickProof(e.target.files?.[0]); e.target.value = ''; }} />
+                </label>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" onClick={() => setMarkPaidOpen(false)} disabled={busy}>Cancel</Button>
+            <Button type="button" onClick={confirmMarkPaid} disabled={busy}>
+              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Mark Paid
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
