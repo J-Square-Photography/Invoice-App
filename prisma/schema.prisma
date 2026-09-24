@@ -282,6 +282,10 @@ model Staff {
   // Trained skill level per discipline (see src/lib/skill-levels.ts), e.g.
   // [{ discipline: "Photography", level: "Enthusiast" }, { discipline: "Videography", level: "Novice" }]
   skills            Json?
+  // Trained tags for admin-defined skill categories beyond Photography/Videography (see
+  // SkillCategory below), e.g. [{ categoryId: "...", value: "Main" }] for a Photobooth category.
+  // Informational only - these don't drive pay the way `skills` above does.
+  extraSkills       Json?
   hourlyRate        Decimal?            @db.Decimal(10, 2)
   dayRate           Decimal?            @db.Decimal(10, 2)
   bankName          String?
@@ -297,6 +301,18 @@ model Staff {
   payslips          Payslip[]
 
   @@map("staff")
+}
+
+// An admin-defined skill category beyond the built-in Photography/Videography rate-card disciplines
+// (e.g. "DSLR Photobooth" with options ["Main", "Assistant"]) - just a tag on a staff profile, with
+// no rate-card/pay meaning of its own. `options` is a JSON string[].
+model SkillCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  options   Json
+  createdAt DateTime @default(now())
+
+  @@map("skill_categories")
 }
 
 // Many-to-many: which staff are allocated to which jobs

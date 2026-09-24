@@ -35,3 +35,27 @@ export function sanitizeSkills(value: unknown): StaffSkill[] {
   }
   return SKILL_DISCIPLINES.filter((d) => byDiscipline.has(d)).map((discipline) => ({ discipline, level: byDiscipline.get(discipline)! }));
 }
+
+/** A tag on one admin-defined skill category (see the SkillCategory model), e.g. { categoryId:
+ * "...", value: "Main" } for a Photobooth category - informational only, no pay meaning. */
+export interface ExtraSkillTag {
+  categoryId: string;
+  value: string;
+}
+
+/** Drops anything not shaped like { categoryId, value }, and anything whose category no longer
+ * exists or whose value isn't one of that category's current options; de-duplicates by category. */
+export function sanitizeExtraSkills(value: unknown, categories: Array<{ id: string; options: unknown }>): ExtraSkillTag[] {
+  if (!Array.isArray(value)) return [];
+  const optionsById = new Map(categories.map((c) => [c.id, Array.isArray(c.options) ? (c.options as unknown[]) : []]));
+  const byCategory = new Map<string, string>();
+  for (const row of value) {
+    if (!row || typeof row !== 'object') continue;
+    const categoryId = (row as { categoryId?: unknown }).categoryId;
+    const val = (row as { value?: unknown }).value;
+    if (typeof categoryId === 'string' && typeof val === 'string' && optionsById.get(categoryId)?.includes(val)) {
+      byCategory.set(categoryId, val);
+    }
+  }
+  return [...byCategory.entries()].map(([categoryId, val]) => ({ categoryId, value: val }));
+}

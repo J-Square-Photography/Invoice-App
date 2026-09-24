@@ -15,9 +15,10 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { FieldTag } from '@/components/field-tag';
+import { SkillTagPicker, type SkillCategoryOption } from '@/components/skill-tag-picker';
 import { Search, UserPlus, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { STAFF_TYPES, STAFF_TYPE_LABELS, type StaffType } from '@/lib/staff-types';
-import { SKILL_DISCIPLINES, SKILL_LEVELS, sanitizeSkills, type StaffSkill } from '@/lib/skill-levels';
+import { SKILL_DISCIPLINES, SKILL_LEVELS, type StaffSkill, type ExtraSkillTag } from '@/lib/skill-levels';
 import { formatDate } from '@/lib/utils';
 
 interface StaffListItem {
@@ -27,6 +28,7 @@ interface StaffListItem {
   phone: string | null;
   type: StaffType;
   skills: StaffSkill[] | null;
+  extraSkills: ExtraSkillTag[] | null;
   bankName: string | null;
   bankAccountNumber: string | null;
   bankAccountName: string | null;
@@ -49,15 +51,16 @@ const EMPTY_FORM = {
   notes: '',
 };
 
-/** { Photography: 'Enthusiast', Videography: '' } - empty string means "not trained", the
- * dropdown's own idle state, so the picker can be plain <select> elements. */
-const emptySkillMap = () => Object.fromEntries(SKILL_DISCIPLINES.map((d) => [d, ''])) as Record<(typeof SKILL_DISCIPLINES)[number], string>;
-const skillsToMap = (skills: StaffSkill[] | null | undefined) => {
-  const map = emptySkillMap();
-  for (const s of skills || []) map[s.discipline] = s.level;
-  return map;
+// The rate-card disciplines double as built-in skill categories in the picker, alongside whatever
+// custom categories (e.g. "DSLR Photobooth") admins have defined via the "+ Add skill" pill.
+const BUILT_IN_CATEGORIES: SkillCategoryOption[] = SKILL_DISCIPLINES.map((d) => ({ id: d, label: d, options: [...SKILL_LEVELS] }));
+
+const skillValuesFromMember = (member: Pick<StaffListItem, 'skills' | 'extraSkills'> | null): Record<string, string | null> => {
+  const values: Record<string, string | null> = {};
+  for (const s of member?.skills || []) values[s.discipline] = s.level;
+  for (const s of member?.extraSkills || []) values[s.categoryId] = s.value;
+  return values;
 };
-const mapToSkills = (map: Record<string, string>): StaffSkill[] => sanitizeSkills(SKILL_DISCIPLINES.map((d) => ({ discipline: d, level: map[d] })).filter((s) => s.level));
 
 export default function StaffPage() {
   return (
@@ -77,7 +80,21 @@ function StaffPageInner() {
   const [editing, setEditing] = useState<StaffListItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [skillMap, setSkillMap] = useState<Record<string, string>>(emptySkillMap());
+  const [skillValues, setSkillValues] = useState<Record<string, string | null>>({});
+  const [customCategories, setCustomCategories] = useState<SkillCategoryOption[]>([]);
+  const allCategories = [...BUILT_IN_CATEGORIES, ...customCategories];
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await fetch('/api/skill-categories');
+      const data = await res.json();
+      setCustomCategories((data.categories || []).map((c: { id: string; name: string; options: string[] }) => ({ id: c.id, label: c.name, options: c.options })));
+    } catch {
+      // Non-fatal: the built-in Photography/Videography pickers still work without custom categories.
+    }
+  }, []);
+
+  useEffect(() => { fetchCategories(); }, [fetchCategories]);
 
   const fetchStaff = useCallback(async (q: string) => {
     try {
@@ -101,7 +118,7 @@ function StaffPageInner() {
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
-    setSkillMap(emptySkillMap());
+    setSkillValues({});
     setDialogOpen(true);
   };
 
@@ -118,15 +135,31 @@ function StaffPageInner() {
       payNowNumber: member.payNowNumber || '',
       notes: member.notes || '',
     });
-    setSkillMap(skillsToMap(member.skills));
+    setSkillValues(skillValuesFromMember(member));
     setDialogOpen(true);
+  };
+
+  const handleAddCategory = async (name: string, options: string[]) => {
+    const res = await fetch('/api/skill-categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, options }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast({ title: 'Error', description: data.error || 'Failed to add skill category', variant: 'destructive' });
+      return;
+    }
+    await fetchCategories();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = { ...form, skills: mapToSkills(skillMap) };
+      const skills = SKILL_DISCIPLINES.filter((d) => skillValues[d]).map((d) => ({ discipline: d, level: skillValues[d] }));
+      const extraSkills = customCategories.filter((c) => skillValues[c.id]).map((c) => ({ categoryId: c.id, value: skillValues[c.id] }));
+      const payload = { ...form, skills, extraSkills };
       const res = await fetch(editing ? `/api/staff/${editing.id}` : '/api/staff', {
         method: editing ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -205,10 +238,15 @@ function StaffPageInner() {
                     <td className="p-4 align-middle font-medium">{member.name}</td>
                     <td className="p-4 align-middle"><Badge variant="secondary">{STAFF_TYPE_LABELS[member.type]}</Badge></td>
                     <td className="p-4 align-middle">
-                      {member.skills && member.skills.length > 0 ? (
+                      {(member.skills?.length || 0) + (member.extraSkills?.length || 0) > 0 ? (
                         <div className="flex flex-wrap gap-1">
-                          {member.skills.map((s) => (
+                          {(member.skills || []).map((s) => (
                             <Badge key={s.discipline} variant="outline" className="text-xs">{s.discipline}: {s.level}</Badge>
+                          ))}
+                          {(member.extraSkills || []).map((s) => (
+                            <Badge key={s.categoryId} variant="outline" className="text-xs">
+                              {customCategories.find((c) => c.id === s.categoryId)?.label ?? 'Skill'}: {s.value}
+                            </Badge>
                           ))}
                         </div>
                       ) : (
@@ -270,24 +308,13 @@ function StaffPageInner() {
 
             <div className="space-y-2">
               <Label>Skills <FieldTag /></Label>
-              <p className="text-xs text-neutral-500">The level they've been trained to in each discipline. Leave a discipline as {'—'} if they haven't been trained in it.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {SKILL_DISCIPLINES.map((discipline) => (
-                  <div key={discipline} className="space-y-2">
-                    <Label htmlFor={`staff-skill-${discipline}`}>{discipline}</Label>
-                    <Select
-                      id={`staff-skill-${discipline}`}
-                      value={skillMap[discipline]}
-                      onChange={(e) => setSkillMap((m) => ({ ...m, [discipline]: e.target.value }))}
-                    >
-                      <option value="">&mdash;</option>
-                      {SKILL_LEVELS.map((level) => (
-                        <option key={level} value={level}>{level}</option>
-                      ))}
-                    </Select>
-                  </div>
-                ))}
-              </div>
+              <p className="text-xs text-neutral-500">Tap a skill to set the level they've been trained to. Tap again to change it, or use Clear to remove it.</p>
+              <SkillTagPicker
+                categories={allCategories}
+                values={skillValues}
+                onChange={(categoryId, value) => setSkillValues((v) => ({ ...v, [categoryId]: value }))}
+                onAddCategory={handleAddCategory}
+              />
             </div>
 
             <div className="rounded-lg border border-neutral-200 p-3 space-y-3">
