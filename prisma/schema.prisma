@@ -277,8 +277,11 @@ model Staff {
   phone             String?
   // FT (Full-Time), PT (Part-Time), FREELANCE - dictates how pay is calculated
   type              String              @default("PT")
-  // Free-text role/skills, e.g. "Photographer", "Videographer, Editor"
+  // Legacy free-text role/skills, kept for any pre-existing rows; superseded by `skills` below
   role              String?
+  // Trained skill level per discipline (see src/lib/skill-levels.ts), e.g.
+  // [{ discipline: "Photography", level: "Enthusiast" }, { discipline: "Videography", level: "Novice" }]
+  skills            Json?
   hourlyRate        Decimal?            @db.Decimal(10, 2)
   dayRate           Decimal?            @db.Decimal(10, 2)
   bankName          String?

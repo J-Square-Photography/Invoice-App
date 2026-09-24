@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const hourlyRate = Number(rateOverride) > 0 ? Number(rateOverride) : Number(staff.hourlyRate ?? 0);
     if (!hourlyRate) {
       return NextResponse.json(
-        { error: 'This staff member has no hourly rate set. Add one to their profile, or provide one for this payslip.' },
+        { error: 'This staff member has no hourly rate. Enter one for this payslip.' },
         { status: 400 }
       );
     }

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { isStaffType } from '@/lib/staff-types';
+import { sanitizeSkills } from '@/lib/skill-levels';
 
 const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 const cleanDecimal = (v: unknown): number | null => {
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
   // Bank/PayNow details are sensitive: only actually shown to someone with the staff permission
   // (a Manager who can only see the staff picker for project assignment gets the bare minimum).
   const canSeeFull = hasPermission(user, 'staff');
-  const shaped = staff.map((s) => (canSeeFull ? s : { id: s.id, name: s.name, type: s.type, role: s.role, isActive: s.isActive }));
+  const shaped = staff.map((s) => (canSeeFull ? s : { id: s.id, name: s.name, type: s.type, skills: s.skills, isActive: s.isActive }));
 
   return NextResponse.json({ staff: shaped });
 }
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, email, phone, type, role, hourlyRate, dayRate, bankName, bankAccountNumber, bankAccountName, payNowNumber, notes } = body;
+    const { name, email, phone, type, skills, hourlyRate, dayRate, bankName, bankAccountNumber, bankAccountName, payNowNumber, notes } = body;
 
     if (typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
         email: normalizedEmail,
         phone: clean(phone, 30),
         type: validType,
-        role: clean(role, 120),
+        skills: sanitizeSkills(skills) as unknown as object,
         hourlyRate: cleanDecimal(hourlyRate),
         dayRate: cleanDecimal(dayRate),
         bankName: clean(bankName, 100),

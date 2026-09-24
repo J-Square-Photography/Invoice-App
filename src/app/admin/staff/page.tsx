@@ -14,8 +14,10 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { Search, UserPlus, Loader2, ExternalLink, Pencil, Trash2 } from 'lucide-react';
+import { FieldTag } from '@/components/field-tag';
+import { Search, UserPlus, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { STAFF_TYPES, STAFF_TYPE_LABELS, type StaffType } from '@/lib/staff-types';
+import { SKILL_DISCIPLINES, SKILL_LEVELS, sanitizeSkills, type StaffSkill } from '@/lib/skill-levels';
 import { formatDate } from '@/lib/utils';
 
 interface StaffListItem {
@@ -24,9 +26,7 @@ interface StaffListItem {
   email: string | null;
   phone: string | null;
   type: StaffType;
-  role: string | null;
-  hourlyRate: string | number | null;
-  dayRate: string | number | null;
+  skills: StaffSkill[] | null;
   bankName: string | null;
   bankAccountNumber: string | null;
   bankAccountName: string | null;
@@ -42,15 +42,22 @@ const EMPTY_FORM = {
   email: '',
   phone: '',
   type: 'PT' as StaffType,
-  role: '',
-  hourlyRate: '',
-  dayRate: '',
   bankName: '',
   bankAccountNumber: '',
   bankAccountName: '',
   payNowNumber: '',
   notes: '',
 };
+
+/** { Photography: 'Enthusiast', Videography: '' } - empty string means "not trained", the
+ * dropdown's own idle state, so the picker can be plain <select> elements. */
+const emptySkillMap = () => Object.fromEntries(SKILL_DISCIPLINES.map((d) => [d, ''])) as Record<(typeof SKILL_DISCIPLINES)[number], string>;
+const skillsToMap = (skills: StaffSkill[] | null | undefined) => {
+  const map = emptySkillMap();
+  for (const s of skills || []) map[s.discipline] = s.level;
+  return map;
+};
+const mapToSkills = (map: Record<string, string>): StaffSkill[] => sanitizeSkills(SKILL_DISCIPLINES.map((d) => ({ discipline: d, level: map[d] })).filter((s) => s.level));
 
 export default function StaffPage() {
   return (
@@ -70,6 +77,7 @@ function StaffPageInner() {
   const [editing, setEditing] = useState<StaffListItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [skillMap, setSkillMap] = useState<Record<string, string>>(emptySkillMap());
 
   const fetchStaff = useCallback(async (q: string) => {
     try {
@@ -93,6 +101,7 @@ function StaffPageInner() {
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
+    setSkillMap(emptySkillMap());
     setDialogOpen(true);
   };
 
@@ -103,15 +112,13 @@ function StaffPageInner() {
       email: member.email || '',
       phone: member.phone || '',
       type: member.type,
-      role: member.role || '',
-      hourlyRate: member.hourlyRate != null ? String(member.hourlyRate) : '',
-      dayRate: member.dayRate != null ? String(member.dayRate) : '',
       bankName: member.bankName || '',
       bankAccountNumber: member.bankAccountNumber || '',
       bankAccountName: member.bankAccountName || '',
       payNowNumber: member.payNowNumber || '',
       notes: member.notes || '',
     });
+    setSkillMap(skillsToMap(member.skills));
     setDialogOpen(true);
   };
 
@@ -119,11 +126,7 @@ function StaffPageInner() {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = {
-        ...form,
-        hourlyRate: form.hourlyRate.trim() === '' ? null : Number(form.hourlyRate),
-        dayRate: form.dayRate.trim() === '' ? null : Number(form.dayRate),
-      };
+      const payload = { ...form, skills: mapToSkills(skillMap) };
       const res = await fetch(editing ? `/api/staff/${editing.id}` : '/api/staff', {
         method: editing ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -186,25 +189,31 @@ function StaffPageInner() {
               <tr className="border-b transition-colors hover:bg-muted/50">
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Name</th>
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Type</th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Role</th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Rate</th>
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Skills</th>
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Status</th>
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody className="[&_tr:last-child]:border-0">
               {loading ? (
-                <tr><td colSpan={6} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></td></tr>
+                <tr><td colSpan={5} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></td></tr>
               ) : staff.length === 0 ? (
-                <tr><td colSpan={6} className="h-24 text-center text-muted-foreground">No staff found.</td></tr>
+                <tr><td colSpan={5} className="h-24 text-center text-muted-foreground">No staff found.</td></tr>
               ) : (
                 staff.map((member) => (
                   <tr key={member.id} className="border-b transition-colors hover:bg-muted/50">
                     <td className="p-4 align-middle font-medium">{member.name}</td>
                     <td className="p-4 align-middle"><Badge variant="secondary">{STAFF_TYPE_LABELS[member.type]}</Badge></td>
-                    <td className="p-4 align-middle text-muted-foreground">{member.role || '-'}</td>
-                    <td className="p-4 align-middle text-muted-foreground">
-                      {member.hourlyRate ? `SGD ${Number(member.hourlyRate).toFixed(2)}/hr` : member.dayRate ? `SGD ${Number(member.dayRate).toFixed(2)}/day` : '-'}
+                    <td className="p-4 align-middle">
+                      {member.skills && member.skills.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {member.skills.map((s) => (
+                            <Badge key={s.discipline} variant="outline" className="text-xs">{s.discipline}: {s.level}</Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </td>
                     <td className="p-4 align-middle">
                       <Badge variant={member.isActive ? 'success' : 'destructive'}>{member.isActive ? 'Active' : 'Inactive'}</Badge>
@@ -238,11 +247,11 @@ function StaffPageInner() {
           <form onSubmit={handleSubmit} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="staff-name">Full Name *</Label>
+                <Label htmlFor="staff-name">Full Name <FieldTag required /></Label>
                 <Input id="staff-name" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="staff-type">Classification</Label>
+                <Label htmlFor="staff-type">Classification <FieldTag required /></Label>
                 <Select id="staff-type" value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as StaffType }))}>
                   {STAFF_TYPES.map((t) => (
                     <option key={t} value={t}>{STAFF_TYPE_LABELS[t]}</option>
@@ -250,25 +259,34 @@ function StaffPageInner() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="staff-email">Email</Label>
+                <Label htmlFor="staff-email">Email <FieldTag /></Label>
                 <Input id="staff-email" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="staff-phone">Phone</Label>
+                <Label htmlFor="staff-phone">Phone <FieldTag /></Label>
                 <PhoneInput id="staff-phone" value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="staff-role">Role / Skills</Label>
-                <Input id="staff-role" placeholder="e.g. Photographer, Videographer" value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} />
-              </div>
-              <div />
-              <div className="space-y-2">
-                <Label htmlFor="staff-hourly">Hourly Rate (SGD)</Label>
-                <Input id="staff-hourly" type="number" min="0" step="0.01" value={form.hourlyRate} onChange={(e) => setForm((f) => ({ ...f, hourlyRate: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="staff-day">Standard Day Rate (SGD)</Label>
-                <Input id="staff-day" type="number" min="0" step="0.01" value={form.dayRate} onChange={(e) => setForm((f) => ({ ...f, dayRate: e.target.value }))} />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Skills <FieldTag /></Label>
+              <p className="text-xs text-neutral-500">The level they've been trained to in each discipline. Leave a discipline as {'—'} if they haven't been trained in it.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {SKILL_DISCIPLINES.map((discipline) => (
+                  <div key={discipline} className="space-y-2">
+                    <Label htmlFor={`staff-skill-${discipline}`}>{discipline}</Label>
+                    <Select
+                      id={`staff-skill-${discipline}`}
+                      value={skillMap[discipline]}
+                      onChange={(e) => setSkillMap((m) => ({ ...m, [discipline]: e.target.value }))}
+                    >
+                      <option value="">&mdash;</option>
+                      {SKILL_LEVELS.map((level) => (
+                        <option key={level} value={level}>{level}</option>
+                      ))}
+                    </Select>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -276,26 +294,26 @@ function StaffPageInner() {
               <p className="text-sm font-semibold">Salary payment details</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="staff-bank-name">Bank Name</Label>
+                  <Label htmlFor="staff-bank-name">Bank Name <FieldTag /></Label>
                   <Input id="staff-bank-name" value={form.bankName} onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="staff-bank-acc">Bank Account Number</Label>
+                  <Label htmlFor="staff-bank-acc">Bank Account Number <FieldTag /></Label>
                   <Input id="staff-bank-acc" value={form.bankAccountNumber} onChange={(e) => setForm((f) => ({ ...f, bankAccountNumber: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="staff-bank-acc-name">Account Name</Label>
+                  <Label htmlFor="staff-bank-acc-name">Account Name <FieldTag /></Label>
                   <Input id="staff-bank-acc-name" value={form.bankAccountName} onChange={(e) => setForm((f) => ({ ...f, bankAccountName: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="staff-paynow">PayNow Number</Label>
+                  <Label htmlFor="staff-paynow">PayNow Number <FieldTag /></Label>
                   <Input id="staff-paynow" placeholder="Mobile or UEN" value={form.payNowNumber} onChange={(e) => setForm((f) => ({ ...f, payNowNumber: e.target.value }))} />
                 </div>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="staff-notes">Internal Notes</Label>
+              <Label htmlFor="staff-notes">Internal Notes <FieldTag /></Label>
               <Textarea id="staff-notes" rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
             </div>
 

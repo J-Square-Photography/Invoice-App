@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { isStaffType } from '@/lib/staff-types';
+import { sanitizeSkills } from '@/lib/skill-levels';
 
 const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 const cleanDecimal = (v: unknown): number | null => {
@@ -39,7 +40,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   try {
     const body = await request.json();
-    const { name, email, phone, type, role, hourlyRate, dayRate, bankName, bankAccountNumber, bankAccountName, payNowNumber, notes, isActive } = body;
+    const { name, email, phone, type, skills, hourlyRate, dayRate, bankName, bankAccountNumber, bankAccountName, payNowNumber, notes, isActive } = body;
 
     const updateData: Record<string, unknown> = {};
     if (name !== undefined) {
@@ -56,7 +57,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     if (phone !== undefined) updateData.phone = clean(phone, 30);
     if (type !== undefined) updateData.type = isStaffType(type) ? type : 'PT';
-    if (role !== undefined) updateData.role = clean(role, 120);
+    if (skills !== undefined) updateData.skills = sanitizeSkills(skills) as unknown as object;
     if (hourlyRate !== undefined) updateData.hourlyRate = cleanDecimal(hourlyRate);
     if (dayRate !== undefined) updateData.dayRate = cleanDecimal(dayRate);
     if (bankName !== undefined) updateData.bankName = clean(bankName, 100);

@@ -1,0 +1,18 @@
+Replace free-text staff role with skill-level tags, tidy the form
+
+- Add Staff form: every label now shows (Required)/(Optional) via the
+  existing FieldTag component.
+- Removed the Hourly Rate and Standard Day Rate fields from the Add/
+  Edit Staff form - pay is set per payslip instead (Generate Payslip
+  already has a rate field for this).
+- Replaced the single free-text "Role / Skills" input with a
+  dropdown per discipline (Photography, Videography), each offering
+  the studio's own skill ladder (Beginner, Novice, Enthusiast,
+  Professional, Director) - the same tier names already used for
+  client-facing service pricing. Stored as a new `skills` JSON column
+  on Staff (additive migration); the old `role` column is left in
+  place for any pre-existing rows but no longer surfaced in this form.
+- Staff list shows each person's trained disciplines/levels as tags
+  in place of the old plain-text Role and Rate columns.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
