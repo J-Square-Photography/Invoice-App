@@ -328,6 +328,12 @@ model Timesheet {
   breakMinutes Int       @default(0)
   // (end - start - break), worked out and stored at save time (see src/lib/timesheet-calculations.ts)
   totalHours   Decimal   @db.Decimal(6, 2)
+  // Which discipline this shift was worked in (see src/lib/skill-levels.ts) - determines the pay
+  // rate below via the staff member's trained level in it (src/lib/staff-rate-card.ts)
+  discipline   String?
+  // The pay rate for this shift, snapshotted from the rate card at logging time so a later change
+  // to the rate card or the staff member's skill level never rewrites the pay for a past shift
+  hourlyRate   Decimal?  @db.Decimal(10, 2)
   notes        String?
   // Set once this shift has been rolled into a generated payslip, so it isn't double-counted
   payslipId    String?
@@ -348,9 +354,15 @@ model Payslip {
   periodEnd     DateTime
   totalHours    Decimal     @default(0) @db.Decimal(8, 2)
   overtimeHours Decimal     @default(0) @db.Decimal(8, 2)
+  // The blended effective rate (basicPay / regularHours) for a quick headline figure; the real
+  // per-discipline math lives in payBreakdown below, since pay can span more than one rate
   hourlyRate    Decimal     @default(0) @db.Decimal(10, 2)
   basicPay      Decimal     @default(0) @db.Decimal(12, 2)
   overtimePay   Decimal     @default(0) @db.Decimal(12, 2)
+  // One row per discipline/rate worked in the period: { discipline, level, hourlyRate, regularHours,
+  // overtimeHours, basicPay, overtimePay } - lets the payslip PDF show "20h x $25/hr" per discipline
+  // instead of one blended line when a staff member worked shifts at more than one rate
+  payBreakdown  Json?
   // Itemised rows, each { label: string, amount: number }: transport/meal allowances,
   // deductions like unpaid leave or CPF contributions
   allowances    Json?

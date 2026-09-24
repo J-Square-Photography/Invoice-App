@@ -22,10 +22,7 @@ function payslip(overrides: Partial<PayslipPDFData> = {}): PayslipPDFData {
     periodStart: new Date('2026-09-01'),
     periodEnd: new Date('2026-09-30'),
     staff: { name: 'Tan Wei Ming', type: 'PT', email: 'wei@example.com', bankName: 'DBS', bankAccountNumber: '123-456', payNowNumber: null },
-    totalHours: 40,
-    regularHours: 40,
-    overtimeHours: 0,
-    hourlyRate: 20,
+    breakdown: [{ group: 'Photography (Novice)', hourlyRate: 20, regularHours: 40, overtimeHours: 0, basicPay: 800, overtimePay: 0 }],
     basicPay: 800,
     overtimePay: 0,
     allowances: [],
@@ -48,7 +45,26 @@ describe('payslip PDF', () => {
 
   it('includes overtime as its own line when present', async () => {
     const bytes = await generatePayslipPDF(
-      payslip({ totalHours: 45, regularHours: 40, overtimeHours: 5, overtimePay: 150, netPay: 950 })
+      payslip({
+        breakdown: [{ group: 'Photography (Novice)', hourlyRate: 20, regularHours: 40, overtimeHours: 5, basicPay: 800, overtimePay: 150 }],
+        overtimePay: 150,
+        netPay: 950,
+      })
+    );
+    expect(await pageCount(bytes)).toBe(1);
+  });
+
+  it('shows one basic/overtime line per discipline when a staff member worked more than one', async () => {
+    const bytes = await generatePayslipPDF(
+      payslip({
+        breakdown: [
+          { group: 'Photography (Enthusiast)', hourlyRate: 60, regularHours: 20, overtimeHours: 0, basicPay: 1200, overtimePay: 0 },
+          { group: 'Videography (Novice)', hourlyRate: 50, regularHours: 10, overtimeHours: 2, basicPay: 500, overtimePay: 150 },
+        ],
+        basicPay: 1700,
+        overtimePay: 150,
+        netPay: 1850,
+      })
     );
     expect(await pageCount(bytes)).toBe(1);
   });

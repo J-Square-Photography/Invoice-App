@@ -46,19 +46,64 @@ export interface PayComputation {
 /** Overtime is paid at 1.5x the basic hourly rate - the standard Singapore OT multiplier. */
 const OVERTIME_MULTIPLIER = 1.5;
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** One logged shift's hours and the pay rate that applies to it (a staff member can be paid
+ * different rates across a period - different disciplines, or a rate-card change - so pay is
+ * always computed shift by shift, never from one flat rate times a total). */
+export interface ShiftForPay {
+  hours: number;
+  hourlyRate: number;
+  /** Grouping key for the payslip breakdown, e.g. "Photography (Enthusiast)". Purely a label. */
+  group: string;
+}
+
+export interface PayGroupBreakdown {
+  group: string;
+  hourlyRate: number;
+  regularHours: number;
+  overtimeHours: number;
+  basicPay: number;
+  overtimePay: number;
+}
+
 /** Basic + overtime pay for a set of shifts, each split into regular/overtime hours first (see
- * splitRegularAndOvertimeHours), then summed and priced at the staff member's hourly rate. */
-export function computePayFromShifts(shiftHours: number[], hourlyRate: number): PayComputation {
-  let regularHours = 0;
-  let overtimeHours = 0;
-  for (const hours of shiftHours) {
-    const split = splitRegularAndOvertimeHours(hours);
-    regularHours += split.regularHours;
-    overtimeHours += split.overtimeHours;
+ * splitRegularAndOvertimeHours) then priced at its own rate, and rolled up both as a whole-period
+ * total and as one row per pay group (see ShiftForPay.group) for an itemised payslip. */
+export function computePayFromShifts(shifts: ShiftForPay[]): PayComputation & { breakdown: PayGroupBreakdown[] } {
+  const byGroup = new Map<string, PayGroupBreakdown>();
+  for (const shift of shifts) {
+    const split = splitRegularAndOvertimeHours(shift.hours);
+    const row = byGroup.get(shift.group) ?? {
+      group: shift.group,
+      hourlyRate: shift.hourlyRate,
+      regularHours: 0,
+      overtimeHours: 0,
+      basicPay: 0,
+      overtimePay: 0,
+    };
+    row.regularHours += split.regularHours;
+    row.overtimeHours += split.overtimeHours;
+    row.basicPay += split.regularHours * shift.hourlyRate;
+    row.overtimePay += split.overtimeHours * shift.hourlyRate * OVERTIME_MULTIPLIER;
+    byGroup.set(shift.group, row);
   }
-  const round2 = (n: number) => Math.round(n * 100) / 100;
-  const basicPay = round2(regularHours * hourlyRate);
-  const overtimePay = round2(overtimeHours * hourlyRate * OVERTIME_MULTIPLIER);
+
+  const breakdown = [...byGroup.values()].map((row) => ({
+    ...row,
+    regularHours: round2(row.regularHours),
+    overtimeHours: round2(row.overtimeHours),
+    basicPay: round2(row.basicPay),
+    overtimePay: round2(row.overtimePay),
+  }));
+
+  const regularHours = breakdown.reduce((sum, r) => sum + r.regularHours, 0);
+  const overtimeHours = breakdown.reduce((sum, r) => sum + r.overtimeHours, 0);
+  const basicPay = round2(breakdown.reduce((sum, r) => sum + r.basicPay, 0));
+  const overtimePay = round2(breakdown.reduce((sum, r) => sum + r.overtimePay, 0));
+  // A single blended rate for a quick headline figure only; the breakdown above is the real math
+  const hourlyRate = regularHours > 0 ? round2(basicPay / regularHours) : breakdown[0]?.hourlyRate ?? 0;
+
   return {
     totalHours: round2(regularHours + overtimeHours),
     regularHours: round2(regularHours),
@@ -66,6 +111,7 @@ export function computePayFromShifts(shiftHours: number[], hourlyRate: number): 
     hourlyRate,
     basicPay,
     overtimePay,
+    breakdown,
   };
 }
 

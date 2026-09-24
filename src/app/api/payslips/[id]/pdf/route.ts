@@ -5,7 +5,7 @@ import { hasPermission } from '@/lib/permissions';
 import { generatePayslipPDF } from '@/lib/payslip-generator';
 import { getCompanySettings } from '@/lib/company-settings';
 import type { StaffType } from '@/lib/staff-types';
-import type { PayLineItem } from '@/lib/timesheet-calculations';
+import type { PayLineItem, PayGroupBreakdown } from '@/lib/timesheet-calculations';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -19,6 +19,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const company = await getCompanySettings();
     const payslipNumber = `PS-${payslip.periodEnd.getFullYear()}-${payslip.id.slice(0, 6).toUpperCase()}`;
+    // A payslip generated before per-shift rate breakdowns existed has no payBreakdown stored -
+    // fall back to a single row built from its old blended totals so it still renders correctly.
+    const breakdown = (payslip.payBreakdown as unknown as PayGroupBreakdown[] | null) ?? [
+      {
+        group: 'Basic Pay',
+        hourlyRate: Number(payslip.hourlyRate),
+        regularHours: Number(payslip.totalHours) - Number(payslip.overtimeHours),
+        overtimeHours: Number(payslip.overtimeHours),
+        basicPay: Number(payslip.basicPay),
+        overtimePay: Number(payslip.overtimePay),
+      },
+    ];
     const pdfBytes = await generatePayslipPDF({
       payslipNumber,
       paymentDate: payslip.paidAt ?? payslip.updatedAt,
@@ -32,10 +44,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         bankAccountNumber: payslip.staff.bankAccountNumber,
         payNowNumber: payslip.staff.payNowNumber,
       },
-      totalHours: Number(payslip.totalHours),
-      regularHours: Number(payslip.totalHours) - Number(payslip.overtimeHours),
-      overtimeHours: Number(payslip.overtimeHours),
-      hourlyRate: Number(payslip.hourlyRate),
+      breakdown,
       basicPay: Number(payslip.basicPay),
       overtimePay: Number(payslip.overtimePay),
       allowances: (payslip.allowances as unknown as PayLineItem[] | null) ?? [],

@@ -14,6 +14,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from '@/components/ui/toast';
 import { Plus, Loader2, Trash2, Lock } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { SKILL_DISCIPLINES, isSkillDiscipline, type StaffSkill } from '@/lib/skill-levels';
+import { staffHourlyRateFor, groupLabelFor } from '@/lib/staff-rate-card';
 
 interface TimesheetItem {
   id: string;
@@ -22,13 +24,15 @@ interface TimesheetItem {
   endTime: string;
   breakMinutes: number;
   totalHours: string | number;
+  discipline: string | null;
+  hourlyRate: string | number | null;
   notes: string | null;
   payslipId: string | null;
   staff: { id: string; name: string };
   project: { id: string; title: string; client?: { companyName: string } };
 }
 
-interface StaffOption { id: string; name: string; type: string; }
+interface StaffOption { id: string; name: string; type: string; skills: StaffSkill[] | null; }
 interface ProjectOption { id: string; title: string; client: { companyName: string }; }
 
 export default function TimesheetsPage() {
@@ -39,7 +43,7 @@ export default function TimesheetsPage() {
   );
 }
 
-const EMPTY_FORM = { staffId: '', projectId: '', date: new Date().toISOString().slice(0, 10), startTime: '09:00', endTime: '17:00', breakMinutes: '60', notes: '' };
+const EMPTY_FORM = { staffId: '', projectId: '', discipline: '', hourlyRate: '', date: new Date().toISOString().slice(0, 10), startTime: '09:00', endTime: '17:00', breakMinutes: '60', notes: '' };
 
 function TimesheetsPageInner() {
   const [timesheets, setTimesheets] = useState<TimesheetItem[]>([]);
@@ -79,6 +83,11 @@ function TimesheetsPageInner() {
     setDialogOpen(true);
   };
 
+  const selectedStaff = staffOptions.find((s) => s.id === form.staffId) ?? null;
+  const selectedDiscipline = isSkillDiscipline(form.discipline) ? form.discipline : null;
+  const cardRate = selectedStaff && selectedDiscipline ? staffHourlyRateFor(selectedStaff.skills, selectedDiscipline) : null;
+  const needsManualRate = !!selectedStaff && !!selectedDiscipline && cardRate == null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -86,7 +95,7 @@ function TimesheetsPageInner() {
       const res = await fetch('/api/timesheets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, breakMinutes: Number(form.breakMinutes) || 0 }),
+        body: JSON.stringify({ ...form, breakMinutes: Number(form.breakMinutes) || 0, hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Failed to log shift');
@@ -141,15 +150,16 @@ function TimesheetsPageInner() {
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Project</th>
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Shift</th>
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Hours</th>
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Rate</th>
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Status</th>
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody className="[&_tr:last-child]:border-0">
               {loading ? (
-                <tr><td colSpan={7} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></td></tr>
+                <tr><td colSpan={8} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></td></tr>
               ) : timesheets.length === 0 ? (
-                <tr><td colSpan={7} className="h-24 text-center text-muted-foreground">No shifts logged.</td></tr>
+                <tr><td colSpan={8} className="h-24 text-center text-muted-foreground">No shifts logged.</td></tr>
               ) : (
                 timesheets.map((t) => (
                   <tr key={t.id} className="border-b transition-colors hover:bg-muted/50">
@@ -158,6 +168,11 @@ function TimesheetsPageInner() {
                     <td className="p-4 align-middle text-muted-foreground">{t.project.title}</td>
                     <td className="p-4 align-middle text-muted-foreground whitespace-nowrap">{t.startTime}{'–'}{t.endTime} ({t.breakMinutes}m break)</td>
                     <td className="p-4 align-middle font-medium">{Number(t.totalHours).toFixed(2)}h</td>
+                    <td className="p-4 align-middle text-muted-foreground whitespace-nowrap">
+                      {t.hourlyRate != null
+                        ? `$${Number(t.hourlyRate).toFixed(2)}/hr${t.discipline ? ` (${t.discipline})` : ''}`
+                        : '—'}
+                    </td>
                     <td className="p-4 align-middle">
                       {t.payslipId ? (
                         <Badge variant="secondary" className="gap-1"><Lock className="h-3 w-3" /> Billed</Badge>
@@ -206,6 +221,39 @@ function TimesheetsPageInner() {
                   <option value="">Choose project...</option>
                   {projectOptions.map((p) => <option key={p.id} value={p.id}>{p.client?.companyName} — {p.title}</option>)}
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ts-discipline">Discipline *</Label>
+                <Select
+                  id="ts-discipline"
+                  required
+                  value={form.discipline}
+                  onChange={(e) => setForm((f) => ({ ...f, discipline: e.target.value, hourlyRate: '' }))}
+                >
+                  <option value="">Choose discipline...</option>
+                  {SKILL_DISCIPLINES.map((d) => <option key={d} value={d}>{d}</option>)}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ts-rate">Hourly Rate {needsManualRate ? '*' : ''}</Label>
+                {needsManualRate ? (
+                  <Input
+                    id="ts-rate"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    placeholder="Not trained in this discipline — enter a rate"
+                    value={form.hourlyRate}
+                    onChange={(e) => setForm((f) => ({ ...f, hourlyRate: e.target.value }))}
+                  />
+                ) : (
+                  <div className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                    {cardRate != null && selectedDiscipline
+                      ? `$${cardRate.toFixed(2)}/hr — ${groupLabelFor(selectedDiscipline, cardRate)}`
+                      : 'Pick staff and discipline to see rate'}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ts-date">Date *</Label>

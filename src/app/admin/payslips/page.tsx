@@ -28,7 +28,7 @@ interface PayslipItem {
   _count: { timesheets: number };
 }
 
-interface StaffOption { id: string; name: string; hourlyRate: string | number | null; }
+interface StaffOption { id: string; name: string; }
 interface LineItem { label: string; amount: string }
 
 export default function PayslipsPage() {
@@ -234,8 +234,9 @@ function PayslipsPageInner() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ps-rate">Hourly Rate Override (SGD)</Label>
-              <Input id="ps-rate" type="number" min="0" step="0.01" placeholder="Leave blank to use their profile rate" value={rateOverride} onChange={(e) => setRateOverride(e.target.value)} />
+              <Label htmlFor="ps-rate">Fallback Rate for Unrated Shifts (SGD)</Label>
+              <Input id="ps-rate" type="number" min="0" step="0.01" placeholder="Only needed if a logged shift has no rate saved" value={rateOverride} onChange={(e) => setRateOverride(e.target.value)} />
+              <p className="text-xs text-muted-foreground">Each shift is normally paid at the rate saved when it was logged (from the staff member&apos;s skill level). This only covers older shifts logged before that.</p>
             </div>
 
             {([['Allowances', allowances, setAllowances], ['Deductions', deductions, setDeductions]] as const).map(([title, rows, setter]) => (

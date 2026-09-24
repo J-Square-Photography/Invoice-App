@@ -1,6 +1,7 @@
 import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
 import { defaultPaymentConfig, type CompanyPaymentConfig } from './payment-config';
 import { STAFF_TYPE_LABELS, type StaffType } from './staff-types';
+import type { PayGroupBreakdown } from './timesheet-calculations';
 
 export interface PayslipPDFData {
   payslipNumber: string;
@@ -15,10 +16,10 @@ export interface PayslipPDFData {
     bankAccountNumber?: string | null;
     payNowNumber?: string | null;
   };
-  totalHours: number;
-  regularHours: number;
-  overtimeHours: number;
-  hourlyRate: number;
+  /** One row per discipline/rate worked in the period - a staff member paid at more than one rate
+   * (different disciplines, or a rate-card change mid-period) gets one Basic Pay + Overtime Pay
+   * line per group, each showing its own hours x rate, rather than one blended figure. */
+  breakdown: PayGroupBreakdown[];
   basicPay: number;
   overtimePay: number;
   allowances: Array<{ label: string; amount: number }>;
@@ -158,21 +159,24 @@ export async function generatePayslipPDF(data: PayslipPDFData): Promise<Uint8Arr
   textRight('AMOUNT (SGD)', RIGHT - 8, y - 14, 8, fontBold, black);
   y -= HEADER_H;
 
-  const rows: Array<{ desc: string; hours: string; rate: string; amount: number }> = [
-    {
-      desc: `Basic Pay (${data.regularHours.toFixed(2)}h × ${money(data.hourlyRate)}/hr)`,
-      hours: data.regularHours.toFixed(2),
-      rate: money(data.hourlyRate),
-      amount: data.basicPay,
-    },
-  ];
-  if (data.overtimeHours > 0) {
-    rows.push({
-      desc: `Overtime Pay (${data.overtimeHours.toFixed(2)}h × ${money(data.hourlyRate * 1.5)}/hr)`,
-      hours: data.overtimeHours.toFixed(2),
-      rate: money(data.hourlyRate * 1.5),
-      amount: data.overtimePay,
-    });
+  const rows: Array<{ desc: string; hours: string; rate: string; amount: number }> = [];
+  for (const group of data.breakdown) {
+    if (group.regularHours > 0) {
+      rows.push({
+        desc: `Basic Pay – ${group.group} (${group.regularHours.toFixed(2)}h × ${money(group.hourlyRate)}/hr)`,
+        hours: group.regularHours.toFixed(2),
+        rate: money(group.hourlyRate),
+        amount: group.basicPay,
+      });
+    }
+    if (group.overtimeHours > 0) {
+      rows.push({
+        desc: `Overtime Pay – ${group.group} (${group.overtimeHours.toFixed(2)}h × ${money(group.hourlyRate * 1.5)}/hr)`,
+        hours: group.overtimeHours.toFixed(2),
+        rate: money(group.hourlyRate * 1.5),
+        amount: group.overtimePay,
+      });
+    }
   }
 
   const rowTop = y;
@@ -196,7 +200,7 @@ export async function generatePayslipPDF(data: PayslipPDFData): Promise<Uint8Arr
   type TotalsRow = { label: string; value: string; kind: 'normal' | 'deduction' | 'bold' | 'net' };
   const totalsRows: TotalsRow[] = [];
   totalsRows.push({ label: 'Basic Pay', value: money(data.basicPay), kind: 'normal' });
-  if (data.overtimeHours > 0) totalsRows.push({ label: 'Overtime Pay', value: money(data.overtimePay), kind: 'normal' });
+  if (data.overtimePay > 0) totalsRows.push({ label: 'Overtime Pay', value: money(data.overtimePay), kind: 'normal' });
   for (const a of data.allowances) totalsRows.push({ label: a.label, value: money(a.amount), kind: 'normal' });
   const grossPay = data.basicPay + data.overtimePay + data.allowances.reduce((s, a) => s + a.amount, 0);
   totalsRows.push({ label: 'Gross Pay', value: money(grossPay), kind: 'bold' });
