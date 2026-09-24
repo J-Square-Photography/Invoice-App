@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Inter } from 'next/font/google';
 import { Check, Moon, Palette, RotateCcw, Sun, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -48,17 +49,21 @@ const COLOUR_FIELDS: Array<{ key: keyof CustomTheme; label: string; help: string
 ];
 
 /** A row of buttons that share the width they need instead of being forced into equal columns, so a
- * longer label (e.g. "Round") never gets clipped, even at a larger text size. */
+ * longer label (e.g. "Round") never gets clipped, even at a larger text size. Each button can also
+ * carry its own inline style (see the per-option maps below), so e.g. the "Round" corners button is
+ * itself drawn with round corners - showing what the choice looks like, not just naming it. */
 function Segmented({
   label,
   value,
   options,
   onChange,
+  previewStyle,
 }: {
   label: string;
   value: string;
   options: ReadonlyArray<{ id: string; name: string; description: string }>;
   onChange: (id: string) => void;
+  previewStyle?: (id: string) => React.CSSProperties;
 }) {
   return (
     <div className="space-y-1.5">
@@ -71,6 +76,7 @@ function Segmented({
             aria-pressed={value === o.id}
             onClick={() => onChange(o.id)}
             title={o.description}
+            style={previewStyle?.(o.id)}
             className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
               value === o.id ? 'border-neutral-900 bg-neutral-100 text-neutral-900' : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
             }`}
@@ -82,6 +88,26 @@ function Segmented({
     </div>
   );
 }
+
+// The exact values each choice sets globally (see :root[data-radius/size/font] in globals.css),
+// reproduced here so a button can preview its own effect instead of just naming it.
+const RADIUS_PREVIEW: Record<string, React.CSSProperties> = {
+  sharp: { borderRadius: '0.1875rem' },
+  default: { borderRadius: '0.5rem' },
+  round: { borderRadius: '1rem' },
+};
+const SIZE_PREVIEW: Record<string, React.CSSProperties> = {
+  compact: { fontSize: '11px' },
+  default: { fontSize: '13px' },
+  large: { fontSize: '16px' },
+};
+const inter = Inter({ subsets: ['latin'] });
+const FONT_PREVIEW: Record<string, React.CSSProperties> = {
+  default: { fontFamily: inter.style.fontFamily },
+  system: { fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
+  serif: { fontFamily: 'Georgia, "Times New Roman", serif' },
+  rounded: { fontFamily: 'ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", Quicksand, Nunito, "Segoe UI", system-ui, sans-serif' },
+};
 
 /** A small mock-up of the page (a card with two text bars and the four status colours), used both for
  * one half of a light/dark split preview and for the mode buttons. */
@@ -270,10 +296,10 @@ function AppearanceDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Segmented label="Corners" value={radius} options={RADIUS_OPTIONS} onChange={(id) => { setRadius(id); setRadiusState(id); }} />
-            <Segmented label="Text size" value={size} options={SIZE_OPTIONS} onChange={(id) => { setTextSize(id); setSizeState(id); }} />
+            <Segmented label="Corners" value={radius} options={RADIUS_OPTIONS} onChange={(id) => { setRadius(id); setRadiusState(id); }} previewStyle={(id) => RADIUS_PREVIEW[id]} />
+            <Segmented label="Text size" value={size} options={SIZE_OPTIONS} onChange={(id) => { setTextSize(id); setSizeState(id); }} previewStyle={(id) => SIZE_PREVIEW[id]} />
           </div>
-          <Segmented label="Font" value={font} options={FONT_OPTIONS} onChange={(id) => { setFont(id); setFontState(id); }} />
+          <Segmented label="Font" value={font} options={FONT_OPTIONS} onChange={(id) => { setFont(id); setFontState(id); }} previewStyle={(id) => FONT_PREVIEW[id]} />
 
           <div className="flex justify-end border-t border-neutral-200 pt-3">
             <Button type="button" variant="outline" size="sm" onClick={reset}>
