@@ -87,24 +87,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'End time must be after start time (after the break is subtracted)' }, { status: 400 });
     }
 
-    const timesheet = await prisma.timesheet.create({
-      data: {
-        staffId,
-        projectId,
-        date: new Date(date),
-        startTime,
-        endTime,
-        breakMinutes: breakMins,
-        totalHours,
-        discipline,
-        hourlyRate,
-        notes: typeof notes === 'string' && notes.trim() ? notes.trim().slice(0, 500) : null,
-      },
-      include: {
-        staff: { select: { id: true, name: true } },
-        project: { select: { id: true, title: true } },
-      },
-    });
+    // Logging a shift on a project implies the staff member is working on it, so make sure they show
+    // up in that project's "Staff Assigned" list too, rather than requiring a separate manual step.
+    const [timesheet] = await prisma.$transaction([
+      prisma.timesheet.create({
+        data: {
+          staffId,
+          projectId,
+          date: new Date(date),
+          startTime,
+          endTime,
+          breakMinutes: breakMins,
+          totalHours,
+          discipline,
+          hourlyRate,
+          notes: typeof notes === 'string' && notes.trim() ? notes.trim().slice(0, 500) : null,
+        },
+        include: {
+          staff: { select: { id: true, name: true } },
+          project: { select: { id: true, title: true } },
+        },
+      }),
+      prisma.projectAssignment.upsert({
+        where: { projectId_staffId: { projectId, staffId } },
+        create: { projectId, staffId },
+        update: {},
+      }),
+    ]);
 
     return NextResponse.json({ timesheet }, { status: 201 });
   } catch (error) {

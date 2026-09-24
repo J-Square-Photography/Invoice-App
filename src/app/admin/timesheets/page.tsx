@@ -56,6 +56,8 @@ function TimesheetsPageInner() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [assignedProjectIds, setAssignedProjectIds] = useState<Set<string> | null>(null);
+  const [showAllProjects, setShowAllProjects] = useState(false);
 
   const fetchTimesheets = useCallback(async (unbilled: boolean) => {
     try {
@@ -80,13 +82,33 @@ function TimesheetsPageInner() {
 
   const openCreate = () => {
     setForm(EMPTY_FORM);
+    setAssignedProjectIds(null);
+    setShowAllProjects(false);
     setDialogOpen(true);
+  };
+
+  // Restrict the Project picker to projects this staff member is already assigned to, so a shift
+  // can't accidentally get logged against the wrong job - "Show all projects" is the escape hatch
+  // for a genuinely new pairing, which then assigns them to it automatically (see handleSubmit).
+  const handleStaffChange = (staffId: string) => {
+    setForm((f) => ({ ...f, staffId, projectId: '' }));
+    setShowAllProjects(false);
+    setAssignedProjectIds(null);
+    if (!staffId) return;
+    fetch(`/api/staff/${staffId}`)
+      .then((r) => r.json())
+      .then((d) => setAssignedProjectIds(new Set((d.staff?.assignments || []).map((a: { projectId: string }) => a.projectId))))
+      .catch(() => setAssignedProjectIds(new Set()));
   };
 
   const selectedStaff = staffOptions.find((s) => s.id === form.staffId) ?? null;
   const selectedDiscipline = isSkillDiscipline(form.discipline) ? form.discipline : null;
   const cardRate = selectedStaff && selectedDiscipline ? staffHourlyRateFor(selectedStaff.skills, selectedDiscipline) : null;
   const needsManualRate = !!selectedStaff && !!selectedDiscipline && cardRate == null;
+  const visibleProjectOptions =
+    assignedProjectIds && assignedProjectIds.size > 0 && !showAllProjects
+      ? projectOptions.filter((p) => assignedProjectIds.has(p.id))
+      : projectOptions;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,17 +232,27 @@ function TimesheetsPageInner() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="ts-staff">Staff Member *</Label>
-                <Select id="ts-staff" required value={form.staffId} onChange={(e) => setForm((f) => ({ ...f, staffId: e.target.value }))}>
+                <Select id="ts-staff" required value={form.staffId} onChange={(e) => handleStaffChange(e.target.value)}>
                   <option value="">Choose staff...</option>
                   {staffOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="ts-project">Project *</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="ts-project">Project *</Label>
+                  {assignedProjectIds && assignedProjectIds.size > 0 && !showAllProjects && (
+                    <button type="button" className="text-xs text-primary hover:underline" onClick={() => setShowAllProjects(true)}>
+                      Not listed? Show all projects
+                    </button>
+                  )}
+                </div>
                 <Select id="ts-project" required value={form.projectId} onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}>
                   <option value="">Choose project...</option>
-                  {projectOptions.map((p) => <option key={p.id} value={p.id}>{p.client?.companyName} — {p.title}</option>)}
+                  {visibleProjectOptions.map((p) => <option key={p.id} value={p.id}>{p.client?.companyName} — {p.title}</option>)}
                 </Select>
+                {form.staffId && assignedProjectIds && assignedProjectIds.size === 0 && (
+                  <p className="text-xs text-muted-foreground">Not yet assigned to any project — picking one here will assign them to it.</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ts-discipline">Discipline *</Label>
