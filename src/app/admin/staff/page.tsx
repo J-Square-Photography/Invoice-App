@@ -88,7 +88,7 @@ function StaffPageInner() {
     try {
       const res = await fetch('/api/skill-categories');
       const data = await res.json();
-      setCustomCategories((data.categories || []).map((c: { id: string; name: string; options: string[] }) => ({ id: c.id, label: c.name, options: c.options })));
+      setCustomCategories((data.categories || []).map((c: { id: string; name: string; options: string[] }) => ({ id: c.id, label: c.name, options: c.options, isCustom: true })));
     } catch {
       // Non-fatal: the built-in Photography/Videography pickers still work without custom categories.
     }
@@ -151,6 +151,27 @@ function StaffPageInner() {
       return;
     }
     await fetchCategories();
+  };
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    const category = customCategories.find((c) => c.id === categoryId);
+    if (!confirm(`Delete the "${category?.label ?? 'skill'}" skill category? It will be removed from every staff member.`)) return;
+    try {
+      const res = await fetch(`/api/skill-categories/${categoryId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to delete skill category');
+      }
+      setSkillValues((v) => {
+        const next = { ...v };
+        delete next[categoryId];
+        return next;
+      });
+      await fetchCategories();
+      toast({ title: 'Deleted', description: 'Skill category removed.' });
+    } catch (error) {
+      toast({ title: 'Error', description: error instanceof Error ? error.message : 'Failed to delete', variant: 'destructive' });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -314,6 +335,7 @@ function StaffPageInner() {
                 values={skillValues}
                 onChange={(categoryId, value) => setSkillValues((v) => ({ ...v, [categoryId]: value }))}
                 onAddCategory={handleAddCategory}
+                onDeleteCategory={handleDeleteCategory}
               />
             </div>
 

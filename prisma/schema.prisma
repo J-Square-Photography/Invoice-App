@@ -350,6 +350,13 @@ model Timesheet {
   // The pay rate for this shift, snapshotted from the rate card at logging time so a later change
   // to the rate card or the staff member's skill level never rewrites the pay for a past shift
   hourlyRate   Decimal?  @db.Decimal(10, 2)
+  // For a Photobooth shift only: "A" (Package A) or "BC" (Package B/C) - the client's chosen
+  // package, which the Photobooth rate card prices differently (see staff-rate-card.ts)
+  photoboothPackage String?
+  // Whether this staff member picked up / dropped off the photobooth equipment for this shift -
+  // each earns a flat allowance on the payslip (see staff-rate-card.ts)
+  equipmentPickup   Boolean   @default(false)
+  equipmentDropoff  Boolean   @default(false)
   notes        String?
   // Set once this shift has been rolled into a generated payslip, so it isn't double-counted
   payslipId    String?

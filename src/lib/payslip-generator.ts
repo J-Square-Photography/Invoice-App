@@ -148,22 +148,29 @@ export async function generatePayslipPDF(data: PayslipPDFData): Promise<Uint8Arr
   y -= 18;
 
   const HEADER_H = 20;
-  const descW = 300;
-  const qtyX = M + descW;
-  const rateX = qtyX + 90;
+  // Description | Hours | Rate | Amount, laid out by explicit column dividers (rather than a fixed
+  // offset from the description column) so the Rate and Amount columns never crowd each other -
+  // they used to sit only ~27pt apart and would visually overlap once both were right-aligned.
+  const descW = 230;
+  const col1X = M + descW; // divider: description | hours
+  const col2X = col1X + 85; // divider: hours | rate
+  const col3X = col2X + 85; // divider: rate | amount
 
   fillBox(M, y - HEADER_H, CW, HEADER_H, TINT);
   text('DESCRIPTION', M + 8, y - 14, 8, fontBold, black);
-  textRight('HOURS', qtyX + 70, y - 14, 8, fontBold, black);
-  textRight('RATE', rateX + 70, y - 14, 8, fontBold, black);
+  textRight('HOURS', col2X - 8, y - 14, 8, fontBold, black);
+  textRight('RATE', col3X - 8, y - 14, 8, fontBold, black);
   textRight('AMOUNT (SGD)', RIGHT - 8, y - 14, 8, fontBold, black);
   y -= HEADER_H;
 
+  // The Hours and Rate columns already show the math, so the description just names what's being
+  // paid (e.g. "Photography (Enthusiast)" or "Photobooth: Main (Package A)") rather than repeating
+  // hours x rate a second time.
   const rows: Array<{ desc: string; hours: string; rate: string; amount: number }> = [];
   for (const group of data.breakdown) {
     if (group.regularHours > 0) {
       rows.push({
-        desc: `Basic Pay – ${group.group} (${group.regularHours.toFixed(2)}h × ${money(group.hourlyRate)}/hr)`,
+        desc: `Basic Pay – ${group.group}`,
         hours: group.regularHours.toFixed(2),
         rate: money(group.hourlyRate),
         amount: group.basicPay,
@@ -171,7 +178,7 @@ export async function generatePayslipPDF(data: PayslipPDFData): Promise<Uint8Arr
     }
     if (group.overtimeHours > 0) {
       rows.push({
-        desc: `Overtime Pay – ${group.group} (${group.overtimeHours.toFixed(2)}h × ${money(group.hourlyRate * 1.5)}/hr)`,
+        desc: `Overtime Pay – ${group.group}`,
         hours: group.overtimeHours.toFixed(2),
         rate: money(group.hourlyRate * 1.5),
         amount: group.overtimePay,
@@ -182,15 +189,15 @@ export async function generatePayslipPDF(data: PayslipPDFData): Promise<Uint8Arr
   const rowTop = y;
   for (const row of rows) {
     text(fitSize(row.desc, 9, fontRegular, descW - 16, 7).text, M + 8, y - 15, 9, fontRegular, black);
-    textRight(row.hours, qtyX + 70, y - 15, 9, fontRegular, darkGray);
-    textRight(row.rate, rateX + 70, y - 15, 9, fontRegular, darkGray);
+    textRight(row.hours, col2X - 8, y - 15, 9, fontRegular, darkGray);
+    textRight(row.rate, col3X - 8, y - 15, 9, fontRegular, darkGray);
     textRight(money(row.amount), RIGHT - 8, y - 15, 9, fontBold, black);
     y -= 24;
     hLine(M, RIGHT, y, RULE, SOFT);
   }
   edgeBox(M, y, CW, rowTop - y + HEADER_H);
   hLine(M, RIGHT, rowTop, EDGE, STRONG);
-  for (const x of [qtyX, rateX]) page.drawLine({ start: { x, y: rowTop + HEADER_H }, end: { x, y }, thickness: RULE, color: SOFT });
+  for (const x of [col1X, col2X, col3X]) page.drawLine({ start: { x, y: rowTop + HEADER_H }, end: { x, y }, thickness: RULE, color: SOFT });
 
   y -= 20;
 

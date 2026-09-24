@@ -11,7 +11,8 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { Plus, Loader2, Download, Trash2, X } from 'lucide-react';
+import { Plus, Loader2, Download, Trash2, X, Eye } from 'lucide-react';
+import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
 
 interface PayslipItem {
@@ -188,6 +189,11 @@ function PayslipsPageInner() {
                     </td>
                     <td className="p-4 align-middle">
                       <div className="flex items-center gap-1">
+                        <Link href={`/admin/payslips/${p.id}`}>
+                          <Button variant="ghost" size="icon" title="View">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </Link>
                         <Button variant="ghost" size="icon" title="Download PDF" onClick={() => window.open(`/api/payslips/${p.id}/pdf`, '_blank')}>
                           <Download className="h-4 w-4" />
                         </Button>

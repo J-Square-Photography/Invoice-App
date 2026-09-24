@@ -4,7 +4,14 @@ import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { computeShiftHours } from '@/lib/timesheet-calculations';
 import { isSkillDiscipline } from '@/lib/skill-levels';
-import { staffHourlyRateFor } from '@/lib/staff-rate-card';
+import {
+  staffHourlyRateFor,
+  isLoggableDiscipline,
+  isPhotoboothDiscipline,
+  isPhotoboothPackageTier,
+  photoboothRoleFromDiscipline,
+  photoboothHourlyRateFor,
+} from '@/lib/staff-rate-card';
 import type { StaffSkill } from '@/lib/skill-levels';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -22,7 +29,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const body = await request.json();
-    const { date, startTime, endTime, breakMinutes, discipline, hourlyRate: rateOverride, notes } = body;
+    const { date, startTime, endTime, breakMinutes, discipline, photoboothPackage, equipmentPickup, equipmentDropoff, hourlyRate: rateOverride, notes } = body;
 
     const updateData: Record<string, unknown> = {};
     if (date !== undefined) updateData.date = new Date(date);
@@ -30,20 +37,37 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (endTime !== undefined) updateData.endTime = endTime;
     if (breakMinutes !== undefined) updateData.breakMinutes = Math.max(0, Math.min(720, Number(breakMinutes) || 0));
     if (notes !== undefined) updateData.notes = typeof notes === 'string' && notes.trim() ? notes.trim().slice(0, 500) : null;
+    if (equipmentPickup !== undefined) updateData.equipmentPickup = Boolean(equipmentPickup);
+    if (equipmentDropoff !== undefined) updateData.equipmentDropoff = Boolean(equipmentDropoff);
 
     if (discipline !== undefined) {
-      if (!isSkillDiscipline(discipline)) return NextResponse.json({ error: 'Invalid discipline' }, { status: 400 });
-      const staff = await prisma.staff.findUnique({ where: { id: existing.staffId }, select: { skills: true } });
-      const cardRate = staffHourlyRateFor(staff?.skills as unknown as StaffSkill[] | null, discipline);
-      const hourlyRate = cardRate ?? (Number(rateOverride) > 0 ? Number(rateOverride) : null);
-      if (!hourlyRate) {
-        return NextResponse.json(
-          { error: `This staff member has no trained ${discipline} skill level. Provide a rate for this shift.` },
-          { status: 400 }
-        );
+      if (!isLoggableDiscipline(discipline)) return NextResponse.json({ error: 'Invalid discipline' }, { status: 400 });
+      if (isPhotoboothDiscipline(discipline)) {
+        const tier = isPhotoboothPackageTier(photoboothPackage) ? photoboothPackage : existing.photoboothPackage;
+        if (!isPhotoboothPackageTier(tier)) {
+          return NextResponse.json({ error: "Choose the client's package (A, or B/C) for a Photobooth shift" }, { status: 400 });
+        }
+        updateData.discipline = discipline;
+        updateData.photoboothPackage = tier;
+        updateData.hourlyRate = photoboothHourlyRateFor(photoboothRoleFromDiscipline(discipline), tier);
+      } else {
+        const staff = await prisma.staff.findUnique({ where: { id: existing.staffId }, select: { skills: true } });
+        const cardRate = staffHourlyRateFor(staff?.skills as unknown as StaffSkill[] | null, discipline);
+        const hourlyRate = cardRate ?? (Number(rateOverride) > 0 ? Number(rateOverride) : null);
+        if (!hourlyRate) {
+          return NextResponse.json(
+            { error: `This staff member has no trained ${discipline} skill level. Provide a rate for this shift.` },
+            { status: 400 }
+          );
+        }
+        updateData.discipline = discipline;
+        updateData.hourlyRate = hourlyRate;
+        updateData.photoboothPackage = null;
       }
-      updateData.discipline = discipline;
-      updateData.hourlyRate = hourlyRate;
+    } else if (existing.discipline && isPhotoboothDiscipline(existing.discipline) && isPhotoboothPackageTier(photoboothPackage)) {
+      // Package changed without changing the discipline itself (editing an existing Photobooth shift)
+      updateData.photoboothPackage = photoboothPackage;
+      updateData.hourlyRate = photoboothHourlyRateFor(photoboothRoleFromDiscipline(existing.discipline), photoboothPackage);
     } else if (rateOverride !== undefined && Number(rateOverride) > 0) {
       updateData.hourlyRate = Number(rateOverride);
     }

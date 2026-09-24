@@ -1,4 +1,4 @@
-import { SKILL_DISCIPLINES, type SkillDiscipline, type SkillLevel, type StaffSkill } from './skill-levels';
+import { SKILL_DISCIPLINES, isSkillDiscipline, type SkillDiscipline, type SkillLevel, type StaffSkill } from './skill-levels';
 
 /**
  * What the studio pays its own staff per hour, by discipline and trained skill level - the client
@@ -35,3 +35,60 @@ export function groupLabelFor(discipline: SkillDiscipline, hourlyRate: number): 
 }
 
 export { SKILL_DISCIPLINES };
+
+// ==================== Photobooth crew pay ====================
+// Unlike Photography/Videography, a Photobooth crew member's pay doesn't depend on a trained skill
+// level - every Main/Assistant is paid the same rate, which instead depends on which package the
+// client booked (see photobooth-presets.ts: Package A vs B/C). So this is a separate, smaller rate
+// card keyed by role + package tier rather than by skill level.
+
+export const PHOTOBOOTH_ROLES = ['Main', 'Assistant'] as const;
+export type PhotoboothRole = (typeof PHOTOBOOTH_ROLES)[number];
+
+export const PHOTOBOOTH_DISCIPLINES = PHOTOBOOTH_ROLES.map((r) => `Photobooth: ${r}`) as [
+  `Photobooth: ${PhotoboothRole}`,
+  `Photobooth: ${PhotoboothRole}`,
+];
+export type PhotoboothDiscipline = (typeof PHOTOBOOTH_DISCIPLINES)[number];
+
+export function isPhotoboothDiscipline(value: string): value is PhotoboothDiscipline {
+  return (PHOTOBOOTH_DISCIPLINES as readonly string[]).includes(value);
+}
+
+export function photoboothRoleFromDiscipline(discipline: PhotoboothDiscipline): PhotoboothRole {
+  return discipline.replace('Photobooth: ', '') as PhotoboothRole;
+}
+
+/** Any discipline that can be logged on a shift and priced - the skill-ladder disciplines
+ * (Photography/Videography) or a Photobooth crew role. */
+export function isLoggableDiscipline(value: string): value is SkillDiscipline | PhotoboothDiscipline {
+  return isSkillDiscipline(value) || isPhotoboothDiscipline(value);
+}
+
+/** "A" for Package A, or "BC" for Package B or C (which are paid the same) - the client's chosen
+ * package tier, picked by hand when logging a Photobooth shift since a project has no single
+ * structured "package" field of its own (only free-text invoice line items). */
+export const PHOTOBOOTH_PACKAGE_TIERS = ['A', 'BC'] as const;
+export type PhotoboothPackageTier = (typeof PHOTOBOOTH_PACKAGE_TIERS)[number];
+
+export function isPhotoboothPackageTier(value: unknown): value is PhotoboothPackageTier {
+  return (PHOTOBOOTH_PACKAGE_TIERS as readonly unknown[]).includes(value);
+}
+
+export const PHOTOBOOTH_HOURLY_RATE_CARD: Record<PhotoboothRole, Record<PhotoboothPackageTier, number>> = {
+  Main: { A: 20, BC: 16 },
+  Assistant: { A: 15, BC: 13 },
+};
+
+/** Flat pay for physically picking up or dropping off the equipment, on top of the hourly rate -
+ * each is independently toggled per shift (see the equipmentPickup/equipmentDropoff timesheet
+ * fields) and rolled into the payslip as its own allowance line (see /api/payslips). */
+export const PHOTOBOOTH_EQUIPMENT_FLAT_RATE = 10;
+
+export function photoboothHourlyRateFor(role: PhotoboothRole, tier: PhotoboothPackageTier): number {
+  return PHOTOBOOTH_HOURLY_RATE_CARD[role][tier];
+}
+
+export function photoboothGroupLabel(role: PhotoboothRole, tier: PhotoboothPackageTier): string {
+  return `Photobooth: ${role} (Package ${tier === 'A' ? 'A' : 'B/C'})`;
+}

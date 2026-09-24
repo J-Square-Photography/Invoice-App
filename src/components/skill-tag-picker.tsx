@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, Plus, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,9 @@ export interface SkillCategoryOption {
   id: string;
   label: string;
   options: string[];
+  /** True for an admin-defined category (as opposed to the built-in Photography/Videography), so
+   * only those get a delete option - the built-ins are pay-critical and can't be removed. */
+  isCustom?: boolean;
 }
 
 /** Positions a floating panel under (or, if there's no room, above) a trigger button, closing on
@@ -93,10 +96,12 @@ function SkillPill({
   category,
   value,
   onChange,
+  onDelete,
 }: {
   category: SkillCategoryOption;
   value: string | null;
   onChange: (value: string | null) => void;
+  onDelete?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const anchorRef = React.useRef<HTMLButtonElement>(null);
@@ -145,6 +150,21 @@ function SkillPill({
                 className="mt-1 rounded-md border-t px-2 py-1.5 text-left text-sm text-neutral-500 hover:bg-neutral-100"
               >
                 Clear
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onDelete();
+                }}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm text-red-600 hover:bg-red-50',
+                  !value && 'mt-1 border-t'
+                )}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete this skill category
               </button>
             )}
           </div>
@@ -237,16 +257,24 @@ export function SkillTagPicker({
   values,
   onChange,
   onAddCategory,
+  onDeleteCategory,
 }: {
   categories: SkillCategoryOption[];
   values: Record<string, string | null | undefined>;
   onChange: (categoryId: string, value: string | null) => void;
   onAddCategory?: (name: string, options: string[]) => Promise<void>;
+  onDeleteCategory?: (categoryId: string) => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       {categories.map((category) => (
-        <SkillPill key={category.id} category={category} value={values[category.id] ?? null} onChange={(v) => onChange(category.id, v)} />
+        <SkillPill
+          key={category.id}
+          category={category}
+          value={values[category.id] ?? null}
+          onChange={(v) => onChange(category.id, v)}
+          onDelete={category.isCustom && onDeleteCategory ? () => onDeleteCategory(category.id) : undefined}
+        />
       ))}
       {onAddCategory && <AddCategoryPill onAdd={onAddCategory} />}
     </div>

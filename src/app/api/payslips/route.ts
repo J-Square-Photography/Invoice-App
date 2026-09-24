@@ -3,7 +3,14 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { computePayFromShifts, computeNetPay, type PayLineItem, type ShiftForPay } from '@/lib/timesheet-calculations';
-import { groupLabelFor } from '@/lib/staff-rate-card';
+import {
+  groupLabelFor,
+  isPhotoboothDiscipline,
+  isPhotoboothPackageTier,
+  photoboothRoleFromDiscipline,
+  photoboothGroupLabel,
+  PHOTOBOOTH_EQUIPMENT_FLAT_RATE,
+} from '@/lib/staff-rate-card';
 import { isSkillDiscipline } from '@/lib/skill-levels';
 
 export async function GET(request: NextRequest) {
@@ -90,12 +97,34 @@ export async function POST(request: NextRequest) {
 
     const shifts: ShiftForPay[] = timesheets.map((t) => {
       const rate = t.hourlyRate != null ? Number(t.hourlyRate) : fallbackRate!;
-      const group = t.discipline && isSkillDiscipline(t.discipline) ? groupLabelFor(t.discipline, rate) : `Other ($${rate.toFixed(2)}/hr)`;
+      let group: string;
+      if (t.discipline && isSkillDiscipline(t.discipline)) {
+        group = groupLabelFor(t.discipline, rate);
+      } else if (t.discipline && isPhotoboothDiscipline(t.discipline) && isPhotoboothPackageTier(t.photoboothPackage)) {
+        group = photoboothGroupLabel(photoboothRoleFromDiscipline(t.discipline), t.photoboothPackage);
+      } else if (t.discipline) {
+        group = `${t.discipline} ($${rate.toFixed(2)}/hr)`;
+      } else {
+        group = `Manual Rate ($${rate.toFixed(2)}/hr)`;
+      }
       return { hours: Number(t.totalHours), hourlyRate: rate, group };
     });
 
     const pay = computePayFromShifts(shifts);
-    const allowances = cleanLineItems(rawAllowances);
+
+    // Photobooth equipment pickup/drop-off is a flat allowance per shift, not part of the hourly
+    // rate - rolled up here into one line per kind rather than one line per shift.
+    const pickupCount = timesheets.filter((t) => t.equipmentPickup).length;
+    const dropoffCount = timesheets.filter((t) => t.equipmentDropoff).length;
+    const autoAllowances: PayLineItem[] = [];
+    if (pickupCount > 0) {
+      autoAllowances.push({ label: `Equipment Pickup (${pickupCount} shift${pickupCount === 1 ? '' : 's'})`, amount: pickupCount * PHOTOBOOTH_EQUIPMENT_FLAT_RATE });
+    }
+    if (dropoffCount > 0) {
+      autoAllowances.push({ label: `Equipment Drop-off (${dropoffCount} shift${dropoffCount === 1 ? '' : 's'})`, amount: dropoffCount * PHOTOBOOTH_EQUIPMENT_FLAT_RATE });
+    }
+
+    const allowances = [...autoAllowances, ...cleanLineItems(rawAllowances)];
     const deductions = cleanLineItems(rawDeductions);
     const netPay = computeNetPay(pay.basicPay, pay.overtimePay, allowances, deductions);
 
