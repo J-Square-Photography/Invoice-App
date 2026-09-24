@@ -12,6 +12,7 @@ export const PERMISSION_KEYS = [
   'payments',
   'contracts',
   'alerts',
+  'staff',
   'settings',
 ] as const;
 
@@ -25,6 +26,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, { name: string; descriptio
   payments: { name: 'Payments', description: 'View and record payments' },
   contracts: { name: 'Contracts', description: 'View and manage contracts' },
   alerts: { name: 'Alerts', description: 'View overdue-invoice alerts' },
+  staff: { name: 'Staff Management', description: 'Staff profiles, timesheets and payslips (bank details, pay rates)' },
   settings: { name: 'Settings', description: 'Company details, bank account, PayNow QR' },
 };
 

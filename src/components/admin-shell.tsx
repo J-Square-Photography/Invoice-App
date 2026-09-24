@@ -23,6 +23,9 @@ import {
   Shield,
   ShieldCheck,
   Search,
+  Briefcase,
+  Clock,
+  Banknote,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LogoToggle } from '@/components/logo-toggle';
@@ -49,6 +52,14 @@ function adminNavItems(showSettings: boolean, showTeam: boolean) {
   return items;
 }
 
+// Part-timer/freelancer profiles, job allocation and payslips - its own sidebar section since it's
+// a distinct area of the app from client/billing work, gated by the single 'staff' permission.
+const staffNavigation = [
+  { name: 'Staff', href: '/admin/staff', icon: Briefcase },
+  { name: 'Timesheets', href: '/admin/timesheets', icon: Clock },
+  { name: 'Payslips', href: '/admin/payslips', icon: Banknote },
+];
+
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -57,6 +68,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const visibleNav = navigation.filter((item) => item.permission === null || can(item.permission));
   const showTeam = user?.role === 'SUPER_ADMIN';
   const showSettings = can('settings');
+  const showStaff = can('staff');
 
   // Close mobile drawer automatically when route changes
   useEffect(() => {
@@ -143,6 +155,33 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+
+          {/* Staff Management Section */}
+          {showStaff && (
+            <>
+              <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                Staff Management
+              </p>
+              {staffNavigation.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-neutral-100 text-neutral-900 font-semibold'
+                        : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </>
+          )}
 
           {/* Admin Section */}
           {(showTeam || showSettings) && (
@@ -268,6 +307,34 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+
+          {/* Staff Management Section */}
+          {showStaff && (
+            <>
+              <p className="mb-2 mt-6 px-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
+                Staff Management
+              </p>
+              {staffNavigation.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-neutral-900 text-white font-semibold shadow-xs'
+                        : 'text-neutral-700 hover:bg-neutral-100 active:bg-neutral-200'
+                    )}
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </>
+          )}
 
           {/* Admin Section */}
           {(showTeam || showSettings) && (

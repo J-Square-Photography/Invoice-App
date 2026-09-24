@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
@@ -18,7 +19,7 @@ import {
 import { useToast } from '@/components/ui/toast';
 import { InvoiceFormDialog } from '@/components/invoice-form-dialog';
 import { cn, formatDate } from '@/lib/utils';
-import { Loader2, Pencil, Trash2, CheckCircle2, FileText, Plus, ClipboardList } from 'lucide-react';
+import { Loader2, Pencil, Trash2, CheckCircle2, FileText, Plus, ClipboardList, Users, X } from 'lucide-react';
 import { QuoteStatusBadge } from '@/components/quote-status-badge';
 import { ServiceTagPicker, ServiceTagBadges } from '@/components/service-tag-picker';
 import { DeleteImpactWarning } from '@/components/delete-impact';
@@ -73,6 +74,21 @@ export function ProjectDetailDialog({
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Staff allocation: who's assigned to this job (see src/app/api/projects/[id]/assignments)
+  const [assignments, setAssignments] = useState<Array<{ id: string; staff: { id: string; name: string; type: string; role: string | null } }>>([]);
+  const [staffOptions, setStaffOptions] = useState<Array<{ id: string; name: string; type: string }>>([]);
+  const [assignStaffId, setAssignStaffId] = useState('');
+  const [assigning, setAssigning] = useState(false);
+
+  const fetchAssignments = async (id: string) => {
+    try {
+      const res = await fetch(`/api/projects/${id}/assignments`);
+      if (res.ok) setAssignments((await res.json()).assignments || []);
+    } catch {
+      // staff allocation is a secondary feature; a failed fetch shouldn't block the rest of the dialog
+    }
+  };
+
   const fetchProject = async (id: string) => {
     try {
       setLoading(true);
@@ -92,9 +108,54 @@ export function ProjectDetailDialog({
   useEffect(() => {
     setMode('view');
     setProject(null);
-    if (projectId) fetchProject(projectId);
+    setAssignments([]);
+    if (projectId) {
+      fetchProject(projectId);
+      fetchAssignments(projectId);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
+
+  // Loaded once, lazily, the first time the dialog is actually used - not needed until then
+  useEffect(() => {
+    if (!projectId || staffOptions.length > 0) return;
+    fetch('/api/staff?activeOnly=true')
+      .then((r) => (r.ok ? r.json() : { staff: [] }))
+      .then((d) => setStaffOptions(d.staff || []))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  const assignStaff = async () => {
+    if (!projectId || !assignStaffId) return;
+    setAssigning(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId: assignStaffId }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to assign staff');
+      setAssignStaffId('');
+      await fetchAssignments(projectId);
+      toast({ title: 'Assigned', description: 'Staff member allocated to this job.' });
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Failed to assign staff', variant: 'destructive' });
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const unassignStaff = async (staffId: string) => {
+    if (!projectId) return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/assignments/${staffId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to remove');
+      await fetchAssignments(projectId);
+    } catch {
+      toast({ title: 'Error', description: 'Failed to remove staff member', variant: 'destructive' });
+    }
+  };
 
   const startEdit = () => {
     if (!project) return;
@@ -303,6 +364,42 @@ export function ProjectDetailDialog({
                   <Label>Notes</Label>
                   <div className="whitespace-pre-wrap text-sm">
                     {project.notes || <span className="text-muted-foreground italic">No notes.</span>}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-neutral-500" /> Staff Assigned
+                  </Label>
+                  {assignments.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {assignments.map((a) => (
+                        <Badge key={a.id} variant="secondary" className="gap-1.5 py-1.5 pl-2.5 pr-1.5">
+                          {a.staff.name}
+                          <button
+                            type="button"
+                            onClick={() => unassignStaff(a.staff.id)}
+                            title="Remove from this job"
+                            className="rounded-full p-0.5 hover:bg-neutral-300/60"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Select value={assignStaffId} onChange={(e) => setAssignStaffId(e.target.value)} className="flex-1">
+                      <option value="">Assign a staff member...</option>
+                      {staffOptions
+                        .filter((s) => !assignments.some((a) => a.staff.id === s.id))
+                        .map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                    </Select>
+                    <Button type="button" variant="outline" size="sm" disabled={!assignStaffId || assigning} onClick={assignStaff}>
+                      {assigning ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+                    </Button>
                   </div>
                 </div>
 

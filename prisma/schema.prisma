@@ -90,6 +90,8 @@ model Project {
   updatedAt      DateTime  @updatedAt
   invoices       Invoice[]
   quotes         Quote[]
+  assignments    ProjectAssignment[]
+  timesheets     Timesheet[]
 
   @@map("projects")
 }
@@ -264,4 +266,99 @@ model PaymentReversal {
   reversedAt     DateTime  @default(now())
 
   @@map("payment_reversals")
+}
+
+// ==================== Staff Management ====================
+
+model Staff {
+  id                String              @id @default(uuid())
+  name              String
+  email             String?             @unique
+  phone             String?
+  // FT (Full-Time), PT (Part-Time), FREELANCE - dictates how pay is calculated
+  type              String              @default("PT")
+  // Free-text role/skills, e.g. "Photographer", "Videographer, Editor"
+  role              String?
+  hourlyRate        Decimal?            @db.Decimal(10, 2)
+  dayRate           Decimal?            @db.Decimal(10, 2)
+  bankName          String?
+  bankAccountNumber String?
+  bankAccountName   String?
+  payNowNumber      String?
+  isActive          Boolean             @default(true)
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  assignments       ProjectAssignment[]
+  timesheets        Timesheet[]
+  payslips          Payslip[]
+
+  @@map("staff")
+}
+
+// Many-to-many: which staff are allocated to which jobs
+model ProjectAssignment {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  staffId   String
+  staff     Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  // This job's specific role for this staff member, e.g. "Lead Photographer" (optional, distinct
+  // from the staff member's general role/skills)
+  role      String?
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, staffId])
+  @@map("project_assignments")
+}
+
+// A single logged shift: one staff member, one project, one day
+model Timesheet {
+  id           String    @id @default(uuid())
+  staffId      String
+  staff        Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  date         DateTime
+  startTime    String // "HH:MM", 24-hour
+  endTime      String // "HH:MM", 24-hour
+  breakMinutes Int       @default(0)
+  // (end - start - break), worked out and stored at save time (see src/lib/timesheet-calculations.ts)
+  totalHours   Decimal   @db.Decimal(6, 2)
+  notes        String?
+  // Set once this shift has been rolled into a generated payslip, so it isn't double-counted
+  payslipId    String?
+  payslip      Payslip?  @relation(fields: [payslipId], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("timesheets")
+}
+
+// A generated pay statement for one staff member over one period, itemised for MOM-style
+// compliance (basic pay math, overtime, allowances, deductions, net pay).
+model Payslip {
+  id            String      @id @default(uuid())
+  staffId       String
+  staff         Staff       @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  periodStart   DateTime
+  periodEnd     DateTime
+  totalHours    Decimal     @default(0) @db.Decimal(8, 2)
+  overtimeHours Decimal     @default(0) @db.Decimal(8, 2)
+  hourlyRate    Decimal     @default(0) @db.Decimal(10, 2)
+  basicPay      Decimal     @default(0) @db.Decimal(12, 2)
+  overtimePay   Decimal     @default(0) @db.Decimal(12, 2)
+  // Itemised rows, each { label: string, amount: number }: transport/meal allowances,
+  // deductions like unpaid leave or CPF contributions
+  allowances    Json?
+  deductions    Json?
+  netPay        Decimal     @default(0) @db.Decimal(12, 2)
+  status        String      @default("DRAFT") // DRAFT, PAID
+  paidAt        DateTime?
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  timesheets    Timesheet[]
+
+  @@map("payslips")
 }
