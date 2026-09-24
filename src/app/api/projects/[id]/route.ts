@@ -5,6 +5,7 @@ import { hasPermission } from '@/lib/permissions';
 import { cleanTags, legacyTypeForTags } from '@/lib/service-tags';
 import { isPipelineStatus, parseOptionalDate, cleanTitle } from '@/lib/project-validation';
 import { deleteImpact } from '@/lib/delete-impact';
+import { sanitizeRequestedCrew } from '@/lib/skill-levels';
 
 export async function GET(
   request: NextRequest,
@@ -72,6 +73,10 @@ export async function PATCH(
       updateData.shootDate = parsed.date;
     }
     if (notes !== undefined) updateData.notes = notes || null;
+    if (body.requestedCrew !== undefined) {
+      const crew = sanitizeRequestedCrew(body.requestedCrew);
+      updateData.requestedCrew = crew.length > 0 ? (crew as unknown as object) : null;
+    }
     if (clientId !== undefined) {
       const client = await prisma.client.findUnique({ where: { id: clientId } });
       if (!client) {

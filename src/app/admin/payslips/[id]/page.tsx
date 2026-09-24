@@ -236,7 +236,7 @@ function PayslipDetailPageInner() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Mark Payslip as Paid</DialogTitle>
-            <DialogDescription>This locks the payslip. Optionally attach a screenshot as proof of the transfer.</DialogDescription>
+            <DialogDescription>This locks the payslip. Attach a screenshot as proof of the transfer.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -254,15 +254,18 @@ function PayslipDetailPageInner() {
               ) : (
                 <label className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed border-neutral-300 px-3 py-4 text-center text-sm text-neutral-600 hover:bg-neutral-50">
                   {proofBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImagePlus className="h-5 w-5 text-neutral-400" />}
-                  <span>{proofBusy ? 'Shrinking the image...' : 'Choose a screenshot or photo (optional)'}</span>
+                  <span>{proofBusy ? 'Shrinking the image...' : 'Choose a screenshot or photo'}</span>
                   <input type="file" accept="image/*" className="hidden" disabled={proofBusy} onChange={(e) => { pickProof(e.target.files?.[0]); e.target.value = ''; }} />
                 </label>
+              )}
+              {!proof && !payslip.proofBytes && (
+                <p className="text-xs text-red-600">A proof screenshot is required before this payslip can be marked as paid.</p>
               )}
             </div>
           </div>
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={() => setMarkPaidOpen(false)} disabled={busy}>Cancel</Button>
-            <Button type="button" onClick={confirmMarkPaid} disabled={busy}>
+            <Button type="button" onClick={confirmMarkPaid} disabled={busy || (!proof && !payslip.proofBytes)}>
               {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Mark Paid
             </Button>

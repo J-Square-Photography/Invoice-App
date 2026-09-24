@@ -1,4 +1,4 @@
-import { SKILL_DISCIPLINES, isSkillDiscipline, type SkillDiscipline, type SkillLevel, type StaffSkill } from './skill-levels';
+import { SKILL_DISCIPLINES, SKILL_LEVELS, isSkillDiscipline, type SkillDiscipline, type SkillLevel, type StaffSkill } from './skill-levels';
 
 /**
  * What the studio pays its own staff per hour, by discipline and trained skill level - the client
@@ -32,6 +32,26 @@ export function staffHourlyRateFor(skills: StaffSkill[] | null | undefined, disc
 export function groupLabelFor(discipline: SkillDiscipline, hourlyRate: number): string {
   const level = (Object.entries(STAFF_HOURLY_RATE_CARD[discipline]) as Array<[SkillLevel, number]>).find(([, rate]) => rate === hourlyRate)?.[0];
   return level ? `${discipline} (${level})` : `${discipline} ($${hourlyRate.toFixed(2)}/hr)`;
+}
+
+/** Every skill level a staff member trained to `trainedLevel` is allowed to bill a specific shift
+ * at - the ladder up to and including their trained level (e.g. trained to Enthusiast can bill a
+ * shift as Beginner, Novice or Enthusiast, but never Professional or Director). */
+export function eligibleSkillLevelsFor(trainedLevel: SkillLevel): SkillLevel[] {
+  const idx = SKILL_LEVELS.indexOf(trainedLevel);
+  return SKILL_LEVELS.slice(0, idx + 1);
+}
+
+/** The rate card's hourly pay for an explicitly chosen discipline + level (as opposed to
+ * `staffHourlyRateFor`, which always uses the staff member's max trained level). */
+export function rateForLevel(discipline: SkillDiscipline, level: SkillLevel): number {
+  return STAFF_HOURLY_RATE_CARD[discipline][level];
+}
+
+/** The skill level, if any, whose rate-card price matches a snapshotted hourly rate - the reverse
+ * of `rateForLevel`, used to pre-select a shift's level when editing it. */
+export function levelForRate(discipline: SkillDiscipline, hourlyRate: number): SkillLevel | null {
+  return (Object.entries(STAFF_HOURLY_RATE_CARD[discipline]) as Array<[SkillLevel, number]>).find(([, rate]) => rate === hourlyRate)?.[0] ?? null;
 }
 
 export { SKILL_DISCIPLINES };

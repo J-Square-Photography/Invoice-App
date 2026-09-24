@@ -12,11 +12,15 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { Plus, Loader2, Trash2, Lock, Pencil, Undo2 } from 'lucide-react';
+import { Plus, Loader2, Trash2, Lock, Pencil, Undo2, Receipt } from 'lucide-react';
+import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
-import { SKILL_DISCIPLINES, isSkillDiscipline, type StaffSkill } from '@/lib/skill-levels';
+import { SKILL_DISCIPLINES, isSkillDiscipline, type StaffSkill, type SkillLevel } from '@/lib/skill-levels';
 import {
-  staffHourlyRateFor,
+  skillLevelFor,
+  eligibleSkillLevelsFor,
+  rateForLevel,
+  levelForRate,
   groupLabelFor,
   PHOTOBOOTH_DISCIPLINES,
   isPhotoboothDiscipline,
@@ -60,6 +64,7 @@ const EMPTY_FORM = {
   projectId: '',
   discipline: '',
   hourlyRate: '',
+  skillLevel: '' as SkillLevel | '',
   photoboothPackage: '',
   equipmentPickup: false,
   equipmentDropoff: false,
@@ -106,24 +111,47 @@ function TimesheetsPageInner() {
     fetch('/api/projects').then((r) => r.json()).then((d) => setProjectOptions(d.projects || [])).catch(() => {});
   }, []);
 
-  const openCreate = () => {
+  const openCreate = (prefillStaffId?: string) => {
     setEditing(null);
-    setForm(EMPTY_FORM);
-    setAssignedProjectIds(null);
+    setForm(prefillStaffId ? { ...EMPTY_FORM, staffId: prefillStaffId } : EMPTY_FORM);
     setShowAllProjects(false);
+    if (prefillStaffId) {
+      setAssignedProjectIds(null);
+      fetch(`/api/staff/${prefillStaffId}`)
+        .then((r) => r.json())
+        .then((d) => setAssignedProjectIds(new Set((d.staff?.assignments || []).map((a: { projectId: string }) => a.projectId))))
+        .catch(() => setAssignedProjectIds(new Set()));
+    } else {
+      setAssignedProjectIds(null);
+    }
     setDialogOpen(true);
   };
+
+  // "Log a Shift" links from the Staff tab (?logStaffId=...) land here with the dialog already open
+  // and that staff member pre-selected.
+  useEffect(() => {
+    const logStaffId = new URLSearchParams(window.location.search).get('logStaffId');
+    if (logStaffId) {
+      openCreate(logStaffId);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Editing a logged shift can't move it to a different staff member or project (the pay
   // calculation and project assignment already happened at logging time) - only the shift details
   // themselves (time, discipline/package, equipment, notes) can be corrected.
   const openEdit = (t: TimesheetItem) => {
     setEditing(t);
+    const editDiscipline = isSkillDiscipline(t.discipline || '') ? (t.discipline as 'Photography' | 'Videography') : null;
+    const existingLevel =
+      editDiscipline && t.hourlyRate != null ? levelForRate(editDiscipline, Number(t.hourlyRate)) : null;
     setForm({
       staffId: t.staff.id,
       projectId: t.project.id,
       discipline: t.discipline || '',
       hourlyRate: '',
+      skillLevel: existingLevel || '',
       photoboothPackage: t.photoboothPackage || '',
       equipmentPickup: t.equipmentPickup,
       equipmentDropoff: t.equipmentDropoff,
@@ -154,8 +182,11 @@ function TimesheetsPageInner() {
 
   const selectedStaff = staffOptions.find((s) => s.id === form.staffId) ?? null;
   const selectedDiscipline = isSkillDiscipline(form.discipline) ? form.discipline : null;
-  const cardRate = selectedStaff && selectedDiscipline ? staffHourlyRateFor(selectedStaff.skills, selectedDiscipline) : null;
-  const needsManualRate = !!selectedStaff && !!selectedDiscipline && cardRate == null;
+  const trainedLevel = selectedStaff && selectedDiscipline ? skillLevelFor(selectedStaff.skills, selectedDiscipline) : null;
+  const eligibleLevels = trainedLevel ? eligibleSkillLevelsFor(trainedLevel) : [];
+  const chosenLevel = (form.skillLevel && eligibleLevels.includes(form.skillLevel) ? form.skillLevel : trainedLevel) || null;
+  const cardRate = selectedDiscipline && chosenLevel ? rateForLevel(selectedDiscipline, chosenLevel) : null;
+  const needsManualRate = !!selectedStaff && !!selectedDiscipline && !trainedLevel;
   const isPhotobooth = isPhotoboothDiscipline(form.discipline);
   const photoboothRole = isPhotoboothDiscipline(form.discipline) ? photoboothRoleFromDiscipline(form.discipline) : null;
   const photoboothRate =
@@ -180,6 +211,7 @@ function TimesheetsPageInner() {
             equipmentPickup: form.equipmentPickup,
             equipmentDropoff: form.equipmentDropoff,
             hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : undefined,
+            skillLevel: form.skillLevel || undefined,
             notes: form.notes,
           }
         : { ...form, breakMinutes: Number(form.breakMinutes) || 0, hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : undefined };
@@ -233,7 +265,7 @@ function TimesheetsPageInner() {
           <h1 className="text-3xl font-bold tracking-tight">Timesheets</h1>
           <RefreshButton onRefresh={() => fetchTimesheets(unbilledOnly)} />
         </div>
-        <Button onClick={openCreate} className="flex items-center gap-2">
+        <Button onClick={() => openCreate()} className="flex items-center gap-2">
           <Plus className="h-4 w-4" /> Log Shift
         </Button>
       </div>
@@ -298,9 +330,16 @@ function TimesheetsPageInner() {
                             <Undo2 className="h-4 w-4" />
                           </Button>
                         ) : (
-                          <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(t)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                          <>
+                            <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(t)}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Link href={`/admin/payslips?genStaffId=${t.staff.id}&genDate=${t.date.slice(0, 10)}`}>
+                              <Button variant="ghost" size="icon" title="Generate Payslip">
+                                <Receipt className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          </>
                         )}
                         <Button
                           variant="ghost"
@@ -372,7 +411,7 @@ function TimesheetsPageInner() {
                   id="ts-discipline"
                   required
                   value={form.discipline}
-                  onChange={(e) => setForm((f) => ({ ...f, discipline: e.target.value, hourlyRate: '', photoboothPackage: '' }))}
+                  onChange={(e) => setForm((f) => ({ ...f, discipline: e.target.value, hourlyRate: '', skillLevel: '', photoboothPackage: '' }))}
                 >
                   <option value="">Choose discipline...</option>
                   {SKILL_DISCIPLINES.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -396,6 +435,20 @@ function TimesheetsPageInner() {
                     <p className="text-xs text-muted-foreground">${photoboothRate.toFixed(2)}/hr</p>
                   )}
                 </div>
+              ) : trainedLevel ? (
+                <div className="space-y-2">
+                  <Label htmlFor="ts-level">Bill This Shift As</Label>
+                  <Select
+                    id="ts-level"
+                    value={chosenLevel || ''}
+                    onChange={(e) => setForm((f) => ({ ...f, skillLevel: e.target.value as SkillLevel }))}
+                  >
+                    {eligibleLevels.map((lvl) => <option key={lvl} value={lvl}>{lvl}</option>)}
+                  </Select>
+                  {cardRate != null && selectedDiscipline && (
+                    <p className="text-xs text-muted-foreground">${cardRate.toFixed(2)}/hr — {groupLabelFor(selectedDiscipline, cardRate)}</p>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-2">
                   <Label htmlFor="ts-rate">Hourly Rate {needsManualRate ? '*' : ''}</Label>
@@ -412,9 +465,7 @@ function TimesheetsPageInner() {
                     />
                   ) : (
                     <div className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
-                      {cardRate != null && selectedDiscipline
-                        ? `$${cardRate.toFixed(2)}/hr — ${groupLabelFor(selectedDiscipline, cardRate)}`
-                        : 'Pick staff and discipline to see rate'}
+                      Pick staff and discipline to see rate
                     </div>
                   )}
                 </div>

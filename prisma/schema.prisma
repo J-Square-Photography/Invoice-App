@@ -86,6 +86,10 @@ model Project {
   pipelineStatus String    @default("INQUIRY")  // INQUIRY, QUOTED, BOOKED, IN_PROGRESS, DELIVERED, CLOSED
   shootDate      DateTime?
   notes          String?
+  // How many photographers/videographers (and at what skill level) the client asked for. Shape:
+  // Array<{ discipline: 'Photography' | 'Videography', level: SkillLevel, count: number }>.
+  // Informational only - doesn't drive staff assignment automatically.
+  requestedCrew  Json?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   invoices       Invoice[]

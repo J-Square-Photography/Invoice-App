@@ -3,9 +3,11 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { computeShiftHours } from '@/lib/timesheet-calculations';
-import { isSkillDiscipline } from '@/lib/skill-levels';
+import { isSkillDiscipline, isSkillLevel } from '@/lib/skill-levels';
 import {
-  staffHourlyRateFor,
+  skillLevelFor,
+  eligibleSkillLevelsFor,
+  rateForLevel,
   isLoggableDiscipline,
   isPhotoboothDiscipline,
   isPhotoboothPackageTier,
@@ -29,7 +31,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const body = await request.json();
-    const { date, startTime, endTime, breakMinutes, discipline, photoboothPackage, equipmentPickup, equipmentDropoff, hourlyRate: rateOverride, notes } = body;
+    const { date, startTime, endTime, breakMinutes, discipline, photoboothPackage, equipmentPickup, equipmentDropoff, hourlyRate: rateOverride, skillLevel, notes } = body;
 
     const updateData: Record<string, unknown> = {};
     if (date !== undefined) updateData.date = new Date(date);
@@ -52,8 +54,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         updateData.hourlyRate = photoboothHourlyRateFor(photoboothRoleFromDiscipline(discipline), tier);
       } else {
         const staff = await prisma.staff.findUnique({ where: { id: existing.staffId }, select: { skills: true } });
-        const cardRate = staffHourlyRateFor(staff?.skills as unknown as StaffSkill[] | null, discipline);
-        const hourlyRate = cardRate ?? (Number(rateOverride) > 0 ? Number(rateOverride) : null);
+        const trainedLevel = skillLevelFor(staff?.skills as unknown as StaffSkill[] | null, discipline);
+        let hourlyRate: number | null;
+        if (trainedLevel) {
+          const chosenLevel = typeof skillLevel === 'string' && isSkillLevel(skillLevel) && eligibleSkillLevelsFor(trainedLevel).includes(skillLevel)
+            ? skillLevel
+            : trainedLevel;
+          hourlyRate = rateForLevel(discipline, chosenLevel);
+        } else {
+          hourlyRate = Number(rateOverride) > 0 ? Number(rateOverride) : null;
+        }
         if (!hourlyRate) {
           return NextResponse.json(
             { error: `This staff member has no trained ${discipline} skill level. Provide a rate for this shift.` },

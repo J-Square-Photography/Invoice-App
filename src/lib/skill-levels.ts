@@ -36,6 +36,38 @@ export function sanitizeSkills(value: unknown): StaffSkill[] {
   return SKILL_DISCIPLINES.filter((d) => byDiscipline.has(d)).map((discipline) => ({ discipline, level: byDiscipline.get(discipline)! }));
 }
 
+/** How many crew of a given discipline + skill level a project asked for - purely informational
+ * (it doesn't drive staffing automatically), set by an admin when a client specifies crew
+ * requirements. See the Project model's `requestedCrew` field. */
+export interface RequestedCrewItem {
+  discipline: SkillDiscipline;
+  level: SkillLevel;
+  count: number;
+}
+
+/** Drops anything not shaped like { discipline, level, count } with recognised values. */
+export function sanitizeRequestedCrew(value: unknown): RequestedCrewItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: RequestedCrewItem[] = [];
+  for (const row of value) {
+    if (!row || typeof row !== 'object') continue;
+    const discipline = (row as { discipline?: unknown }).discipline;
+    const level = (row as { level?: unknown }).level;
+    const count = Number((row as { count?: unknown }).count);
+    if (
+      typeof discipline === 'string' &&
+      isSkillDiscipline(discipline) &&
+      typeof level === 'string' &&
+      isSkillLevel(level) &&
+      Number.isFinite(count) &&
+      count > 0
+    ) {
+      out.push({ discipline, level, count: Math.min(50, Math.round(count)) });
+    }
+  }
+  return out.slice(0, 20);
+}
+
 /** A tag on one admin-defined skill category (see the SkillCategory model), e.g. { categoryId:
  * "...", value: "Main" } for a Photobooth category - informational only, no pay meaning. */
 export interface ExtraSkillTag {

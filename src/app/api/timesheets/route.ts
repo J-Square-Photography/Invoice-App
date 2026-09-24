@@ -3,9 +3,11 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { computeShiftHours } from '@/lib/timesheet-calculations';
-import { isSkillDiscipline } from '@/lib/skill-levels';
+import { isSkillDiscipline, isSkillLevel } from '@/lib/skill-levels';
 import {
-  staffHourlyRateFor,
+  skillLevelFor,
+  eligibleSkillLevelsFor,
+  rateForLevel,
   isLoggableDiscipline,
   isPhotoboothDiscipline,
   isPhotoboothPackageTier,
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { staffId, projectId, date, startTime, endTime, breakMinutes, discipline, photoboothPackage, equipmentPickup, equipmentDropoff, hourlyRate: rateOverride, notes } = body;
+    const { staffId, projectId, date, startTime, endTime, breakMinutes, discipline, photoboothPackage, equipmentPickup, equipmentDropoff, hourlyRate: rateOverride, skillLevel, notes } = body;
 
     if (!staffId || !projectId || !date || !startTime || !endTime || !discipline) {
       return NextResponse.json({ error: 'staffId, projectId, date, startTime, endTime and discipline are required' }, { status: 400 });
@@ -89,11 +91,20 @@ export async function POST(request: NextRequest) {
       packageTier = photoboothPackage;
       hourlyRate = photoboothHourlyRateFor(photoboothRoleFromDiscipline(discipline), packageTier);
     } else if (isSkillDiscipline(discipline)) {
-      // Pay is priced from the staff member's trained level in this discipline, snapshotted now so a
-      // later rate-card or skill-level change never rewrites a past shift's pay. If they aren't
-      // trained in it yet, an admin has to supply a rate by hand rather than the system guessing one.
-      const cardRate = staffHourlyRateFor(staff.skills as unknown as StaffSkill[] | null, discipline);
-      hourlyRate = cardRate ?? (Number(rateOverride) > 0 ? Number(rateOverride) : null);
+      // Pay is priced from a skill level for this shift, snapshotted now so a later rate-card or
+      // skill-level change never rewrites a past shift's pay. The level can be anything at or below
+      // the staff member's trained level (e.g. billed as Novice even if trained to Enthusiast), and
+      // defaults to their trained level if none is chosen. If they aren't trained in it yet, an
+      // admin has to supply a rate by hand rather than the system guessing one.
+      const trainedLevel = skillLevelFor(staff.skills as unknown as StaffSkill[] | null, discipline);
+      if (trainedLevel) {
+        const chosenLevel = typeof skillLevel === 'string' && isSkillLevel(skillLevel) && eligibleSkillLevelsFor(trainedLevel).includes(skillLevel)
+          ? skillLevel
+          : trainedLevel;
+        hourlyRate = rateForLevel(discipline, chosenLevel);
+      } else {
+        hourlyRate = Number(rateOverride) > 0 ? Number(rateOverride) : null;
+      }
       if (!hourlyRate) {
         return NextResponse.json(
           { error: `This staff member has no trained ${discipline} skill level. Set one on their profile, or provide a rate for this shift.` },

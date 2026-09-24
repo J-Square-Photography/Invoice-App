@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { cleanTags, legacyTypeForTags } from '@/lib/service-tags';
 import { isPipelineStatus, parseOptionalDate, cleanTitle } from '@/lib/project-validation';
+import { sanitizeRequestedCrew } from '@/lib/skill-levels';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { clientId, title, projectType, pipelineStatus, shootDate, notes } = body;
     const serviceTags = cleanTags(body.serviceTags);
+    const requestedCrew = sanitizeRequestedCrew(body.requestedCrew);
 
     const cleanedTitle = cleanTitle(title);
     if (!clientId || !cleanedTitle) {
@@ -87,6 +89,7 @@ export async function POST(request: NextRequest) {
         pipelineStatus: pipelineStatus || 'INQUIRY',
         shootDate: parsedDate.date,
         notes: notes || null,
+        requestedCrew: requestedCrew.length > 0 ? (requestedCrew as unknown as object) : undefined,
       },
       include: {
         client: {

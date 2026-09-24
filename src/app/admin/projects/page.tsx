@@ -23,6 +23,8 @@ import { SortSelect, PeriodSelect, useSavedChoice } from '@/components/sort-filt
 import { byDate, byNumber, byText, inPeriod, sortItems, PERIODS, type SortChoice } from '@/lib/sorting';
 import { byPipelineOrder } from '@/lib/project-order';
 import { formatDate } from '@/lib/utils';
+import { RequestedCrewPicker } from '@/components/requested-crew-picker';
+import type { RequestedCrewItem } from '@/lib/skill-levels';
 
 type Project = {
   id: string;
@@ -33,6 +35,7 @@ type Project = {
   pipelineStatus: string;
   shootDate: string | null;
   createdAt?: string;
+  requestedCrew?: RequestedCrewItem[] | null;
   client: { companyName: string };
   _count?: { invoices: number };
 };
@@ -72,6 +75,7 @@ function ProjectsListPageInner() {
   const [serviceTags, setServiceTags] = useState<string[]>([]);
   const [shootDate, setShootDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [requestedCrew, setRequestedCrew] = useState<RequestedCrewItem[]>([]);
   
   // Client Search State
   const [clientSearch, setClientSearch] = useState('');
@@ -194,7 +198,8 @@ function ProjectsListPageInner() {
           clientId: selectedClient.id,
           serviceTags,
           shootDate: shootDate ? new Date(shootDate).toISOString() : null,
-          notes
+          notes,
+          requestedCrew
         }),
       });
 
@@ -206,6 +211,7 @@ function ProjectsListPageInner() {
         setServiceTags([]);
         setShootDate('');
         setNotes('');
+        setRequestedCrew([]);
         setSelectedClient(null);
         setClientSearch('');
         fetchProjects();
@@ -494,6 +500,12 @@ function ProjectsListPageInner() {
               <Label>Services *</Label>
               <ServiceTagPicker value={serviceTags} onChange={setServiceTags} />
               <p className="text-xs text-neutral-500">Pick every service this project involves. Invoices for it will offer only these services' prices.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Requested Crew</Label>
+              <RequestedCrewPicker value={requestedCrew} onChange={setRequestedCrew} />
+              <p className="text-xs text-neutral-500">How many photographers/videographers (and at what skill level) the client asked for.</p>
             </div>
 
             <div className="space-y-2">

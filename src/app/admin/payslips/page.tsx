@@ -11,9 +11,10 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { Plus, Loader2, Download, Trash2, X, Eye, Undo2 } from 'lucide-react';
+import { Plus, Loader2, Download, Trash2, X, Eye, Undo2, ImagePlus } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
+import { compressPaymentProof, type CompressedProof } from '@/lib/image-compress';
 
 interface PayslipItem {
   id: string;
@@ -25,6 +26,7 @@ interface PayslipItem {
   overtimePay: string | number;
   netPay: string | number;
   status: 'DRAFT' | 'PAID';
+  proofBytes: number | null;
   staff: { id: string; name: string; type: string };
   _count: { timesheets: number };
 }
@@ -55,6 +57,11 @@ function PayslipsPageInner() {
   const [allowances, setAllowances] = useState<LineItem[]>([]);
   const [deductions, setDeductions] = useState<LineItem[]>([]);
 
+  const [markPaidTarget, setMarkPaidTarget] = useState<PayslipItem | null>(null);
+  const [proof, setProof] = useState<CompressedProof | null>(null);
+  const [proofBusy, setProofBusy] = useState(false);
+  const [markPaidBusy, setMarkPaidBusy] = useState(false);
+
   const fetchPayslips = useCallback(async () => {
     try {
       setLoading(true);
@@ -74,15 +81,28 @@ function PayslipsPageInner() {
     fetch('/api/staff?activeOnly=true').then((r) => r.json()).then((d) => setStaffOptions(d.staff || [])).catch(() => {});
   }, []);
 
-  const openCreate = () => {
-    setStaffId('');
-    setPeriodStart('');
-    setPeriodEnd('');
+  const openCreate = (prefillStaffId?: string, prefillDate?: string) => {
+    setStaffId(prefillStaffId || '');
+    setPeriodStart(prefillDate || '');
+    setPeriodEnd(prefillDate || '');
     setRateOverride('');
     setAllowances([]);
     setDeductions([]);
     setDialogOpen(true);
   };
+
+  // "Generate Payslip" links from the Timesheets tab (?genStaffId=...&genDate=...) land here with
+  // the dialog already open and that staff member + date pre-selected.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const genStaffId = params.get('genStaffId');
+    const genDate = params.get('genDate');
+    if (genStaffId) {
+      openCreate(genStaffId, genDate || undefined);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const addLine = (setter: React.Dispatch<React.SetStateAction<LineItem[]>>) => setter((rows) => [...rows, { label: '', amount: '' }]);
   const removeLine = (setter: React.Dispatch<React.SetStateAction<LineItem[]>>, idx: number) => setter((rows) => rows.filter((_, i) => i !== idx));
@@ -115,19 +135,46 @@ function PayslipsPageInner() {
     }
   };
 
-  const markPaid = async (p: PayslipItem) => {
-    if (!confirm(`Mark this payslip for ${p.staff.name} as paid? This locks it. (To attach a proof screenshot, use the View page instead.)`)) return;
+  const pickProof = async (file: File | undefined) => {
+    if (!file) return;
+    setProofBusy(true);
     try {
-      const res = await fetch(`/api/payslips/${p.id}`, {
+      const shrunk = await compressPaymentProof(file);
+      if (!shrunk.ok) {
+        toast({ title: 'Image too large', description: 'Try a smaller screenshot.', variant: 'destructive' });
+        return;
+      }
+      setProof(shrunk);
+    } catch (error) {
+      toast({ title: 'Error', description: error instanceof Error ? error.message : 'Could not process that image', variant: 'destructive' });
+    } finally {
+      setProofBusy(false);
+    }
+  };
+
+  const openMarkPaid = (p: PayslipItem) => {
+    setMarkPaidTarget(p);
+    setProof(null);
+  };
+
+  const confirmMarkPaid = async () => {
+    if (!markPaidTarget) return;
+    setMarkPaidBusy(true);
+    try {
+      const res = await fetch(`/api/payslips/${markPaidTarget.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'PAID' }),
+        body: JSON.stringify({ status: 'PAID', proofImage: proof?.dataUrl }),
       });
-      if (!res.ok) throw new Error('Failed to update');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to update');
       toast({ title: 'Updated', description: 'Payslip marked as paid.' });
+      setMarkPaidTarget(null);
       fetchPayslips();
-    } catch {
-      toast({ title: 'Error', description: 'Failed to update payslip', variant: 'destructive' });
+    } catch (error) {
+      toast({ title: 'Error', description: error instanceof Error ? error.message : 'Failed to update payslip', variant: 'destructive' });
+    } finally {
+      setMarkPaidBusy(false);
     }
   };
 
@@ -167,7 +214,7 @@ function PayslipsPageInner() {
           <h1 className="text-3xl font-bold tracking-tight">Payslips</h1>
           <RefreshButton onRefresh={fetchPayslips} />
         </div>
-        <Button onClick={openCreate} className="flex items-center gap-2">
+        <Button onClick={() => openCreate()} className="flex items-center gap-2">
           <Plus className="h-4 w-4" /> Generate Payslip
         </Button>
       </div>
@@ -215,7 +262,7 @@ function PayslipsPageInner() {
                         </Button>
                         {p.status === 'DRAFT' ? (
                           <>
-                            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => markPaid(p)}>Mark Paid</Button>
+                            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => openMarkPaid(p)}>Mark Paid</Button>
                             <Button variant="ghost" size="icon" title="Delete draft" className="text-red-600 hover:text-red-700" onClick={() => handleDelete(p)}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -291,6 +338,49 @@ function PayslipsPageInner() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!markPaidTarget} onOpenChange={(o) => !o && setMarkPaidTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark Payslip as Paid</DialogTitle>
+            <DialogDescription>
+              {markPaidTarget ? `This locks the payslip for ${markPaidTarget.staff.name}. Attach a screenshot as proof of the transfer.` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              {proof ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 space-y-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={proof.dataUrl} alt="Payslip proof preview" className="max-h-64 w-full rounded border border-neutral-200 bg-white object-contain" />
+                  <div className="flex items-center justify-between gap-2 text-xs text-emerald-900">
+                    <span>Shrunk to <strong>{(proof.bytes / 1024).toFixed(0)} KB</strong> ({proof.width}×{proof.height}).</span>
+                    <Button type="button" size="sm" variant="ghost" className="h-7 shrink-0 text-xs" onClick={() => setProof(null)}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed border-neutral-300 px-3 py-4 text-center text-sm text-neutral-600 hover:bg-neutral-50">
+                  {proofBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImagePlus className="h-5 w-5 text-neutral-400" />}
+                  <span>{proofBusy ? 'Shrinking the image...' : 'Choose a screenshot or photo'}</span>
+                  <input type="file" accept="image/*" className="hidden" disabled={proofBusy} onChange={(e) => { pickProof(e.target.files?.[0]); e.target.value = ''; }} />
+                </label>
+              )}
+              {!proof && !markPaidTarget?.proofBytes && (
+                <p className="text-xs text-red-600">A proof screenshot is required before this payslip can be marked as paid.</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" onClick={() => setMarkPaidTarget(null)} disabled={markPaidBusy}>Cancel</Button>
+            <Button type="button" onClick={confirmMarkPaid} disabled={markPaidBusy || (!proof && !markPaidTarget?.proofBytes)}>
+              {markPaidBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Mark Paid
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

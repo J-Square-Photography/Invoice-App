@@ -24,6 +24,8 @@ import { QuoteStatusBadge } from '@/components/quote-status-badge';
 import { ServiceTagPicker, ServiceTagBadges } from '@/components/service-tag-picker';
 import { DeleteImpactWarning } from '@/components/delete-impact';
 import type { DeleteImpact } from '@/lib/delete-impact';
+import { RequestedCrewPicker } from '@/components/requested-crew-picker';
+import type { RequestedCrewItem } from '@/lib/skill-levels';
 
 type Project = {
   id: string;
@@ -35,6 +37,7 @@ type Project = {
   shootDate: string | null;
   notes: string | null;
   createdAt: string;
+  requestedCrew?: RequestedCrewItem[] | null;
   client: { id: string; companyName: string; contactName: string };
   invoices: any[];
   quotes?: any[];
@@ -67,7 +70,7 @@ export function ProjectDetailDialog({
   const [impact, setImpact] = useState<DeleteImpact | null>(null);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
-  const [form, setForm] = useState<{ title: string; serviceTags: string[]; shootDate: string; notes: string }>({ title: '', serviceTags: [], shootDate: '', notes: '' });
+  const [form, setForm] = useState<{ title: string; serviceTags: string[]; shootDate: string; notes: string; requestedCrew: RequestedCrewItem[] }>({ title: '', serviceTags: [], shootDate: '', notes: '', requestedCrew: [] });
   const [isSaving, setIsSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
@@ -164,6 +167,7 @@ export function ProjectDetailDialog({
       serviceTags: project.serviceTags ?? [],
       shootDate: toDateInput(project.shootDate),
       notes: project.notes || '',
+      requestedCrew: project.requestedCrew ?? [],
     });
     setMode('edit');
   };
@@ -207,6 +211,7 @@ export function ProjectDetailDialog({
           serviceTags: form.serviceTags,
           shootDate: form.shootDate ? new Date(form.shootDate).toISOString() : null,
           notes: form.notes,
+          requestedCrew: form.requestedCrew,
         }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to update details');
@@ -269,6 +274,10 @@ export function ProjectDetailDialog({
                   <Label>Services *</Label>
                   <ServiceTagPicker value={form.serviceTags} onChange={(tags) => setForm({ ...form, serviceTags: tags })} />
                   <p className="text-xs text-neutral-500">Invoices for this project offer only the prices of these services.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Requested Crew</Label>
+                  <RequestedCrewPicker value={form.requestedCrew} onChange={(v) => setForm({ ...form, requestedCrew: v })} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="pd-date">Shoot Date</Label>
@@ -358,6 +367,18 @@ export function ProjectDetailDialog({
                       {project.shootDate ? formatDate(project.shootDate) : 'Not scheduled'}
                     </div>
                   </div>
+                  {project.requestedCrew && project.requestedCrew.length > 0 && (
+                    <div className="space-y-1 sm:col-span-2">
+                      <Label>Requested Crew</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {project.requestedCrew.map((item, i) => (
+                          <Badge key={i} variant="outline" className="text-xs">
+                            {item.count}x {item.discipline} ({item.level})
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">

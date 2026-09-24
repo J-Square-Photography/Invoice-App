@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from '@/components/ui/toast';
 import { FieldTag } from '@/components/field-tag';
 import { SkillTagPicker, type SkillCategoryOption } from '@/components/skill-tag-picker';
-import { Search, UserPlus, Loader2, Pencil, Trash2 } from 'lucide-react';
+import { Search, UserPlus, Loader2, Pencil, Trash2, Clock } from 'lucide-react';
 import { STAFF_TYPES, STAFF_TYPE_LABELS, type StaffType } from '@/lib/staff-types';
 import { SKILL_DISCIPLINES, SKILL_LEVELS, type StaffSkill, type ExtraSkillTag } from '@/lib/skill-levels';
 import { PHOTOBOOTH_SKILL_CATEGORY_NAME } from '@/lib/staff-rate-card';
@@ -83,6 +83,8 @@ function StaffPageInner() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [skillValues, setSkillValues] = useState<Record<string, string | null>>({});
   const [customCategories, setCustomCategories] = useState<SkillCategoryOption[]>([]);
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<string | null>(null);
+  const [deletingCategory, setDeletingCategory] = useState(false);
   const allCategories = [...BUILT_IN_CATEGORIES, ...customCategories];
 
   const fetchCategories = useCallback(async () => {
@@ -161,24 +163,41 @@ function StaffPageInner() {
     await fetchCategories();
   };
 
-  const handleDeleteCategory = async (categoryId: string) => {
-    const category = customCategories.find((c) => c.id === categoryId);
-    if (!confirm(`Delete the "${category?.label ?? 'skill'}" skill category? It will be removed from every staff member.`)) return;
+  const handleDeleteCategory = (categoryId: string) => {
+    setDeleteCategoryTarget(categoryId);
+  };
+
+  const removeCategoryForThisStaffOnly = () => {
+    if (!deleteCategoryTarget) return;
+    setSkillValues((v) => {
+      const next = { ...v };
+      delete next[deleteCategoryTarget];
+      return next;
+    });
+    setDeleteCategoryTarget(null);
+  };
+
+  const removeCategoryForAllStaff = async () => {
+    if (!deleteCategoryTarget) return;
+    setDeletingCategory(true);
     try {
-      const res = await fetch(`/api/skill-categories/${categoryId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/skill-categories/${deleteCategoryTarget}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to delete skill category');
       }
       setSkillValues((v) => {
         const next = { ...v };
-        delete next[categoryId];
+        delete next[deleteCategoryTarget];
         return next;
       });
       await fetchCategories();
-      toast({ title: 'Deleted', description: 'Skill category removed.' });
+      toast({ title: 'Deleted', description: 'Skill category removed for all staff.' });
+      setDeleteCategoryTarget(null);
     } catch (error) {
       toast({ title: 'Error', description: error instanceof Error ? error.message : 'Failed to delete', variant: 'destructive' });
+    } finally {
+      setDeletingCategory(false);
     }
   };
 
@@ -290,6 +309,11 @@ function StaffPageInner() {
                         <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(member)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
+                        <Link href={`/admin/timesheets?logStaffId=${member.id}`}>
+                          <Button variant="ghost" size="icon" title="Log a Shift">
+                            <Clock className="h-4 w-4" />
+                          </Button>
+                        </Link>
                         <Button variant="ghost" size="icon" title="Remove" className="text-red-600 hover:text-red-700" onClick={() => handleDelete(member)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -382,6 +406,27 @@ function StaffPageInner() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteCategoryTarget} onOpenChange={(o) => !o && setDeleteCategoryTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete &quot;{customCategories.find((c) => c.id === deleteCategoryTarget)?.label ?? 'skill'}&quot; category</DialogTitle>
+            <DialogDescription>
+              Remove it just for {editing ? editing.name : 'this staff member'}, or delete it globally for every staff member?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-col gap-2 pt-2">
+            <Button type="button" variant="outline" className="w-full justify-start" onClick={removeCategoryForThisStaffOnly}>
+              Only remove from {editing ? editing.name : 'this staff member'}
+            </Button>
+            <Button type="button" variant="destructive" className="w-full justify-start" onClick={removeCategoryForAllStaff} disabled={deletingCategory}>
+              {deletingCategory ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete for all staff members
+            </Button>
+            <Button type="button" variant="ghost" className="w-full" onClick={() => setDeleteCategoryTarget(null)}>Cancel</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

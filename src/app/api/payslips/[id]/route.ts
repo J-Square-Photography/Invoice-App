@@ -52,8 +52,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'A paid payslip is locked. Its line items cannot be changed.' }, { status: 409 });
     }
 
-    // An optional screenshot (e.g. of the bank transfer to the staff member) attached when marking
-    // this payslip as paid - same pattern as a client payment's proof.
+    // A screenshot (e.g. of the bank transfer to the staff member) is mandatory before a payslip can
+    // be marked as paid, unless one was already attached in a prior paid->reverted->paid cycle.
+    if (status === 'PAID' && !proofImage && !existing.proofBytes) {
+      return NextResponse.json(
+        { error: 'A proof screenshot is required before this payslip can be marked as paid.' },
+        { status: 400 }
+      );
+    }
+
     let proof: { mime: string; data: Buffer } | null = null;
     if (status === 'PAID' && proofImage) {
       const parsed = parseProofDataUrl(proofImage);
