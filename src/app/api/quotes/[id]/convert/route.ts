@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { parseStoredDiscounts } from '@/lib/invoice-calculations';
 import { createDraftInvoice } from '@/lib/create-invoice';
+import { logActivity } from '@/lib/activity-log';
 
 /**
  * One-click "convert to invoice": creates a DRAFT invoice with the same line items,
@@ -61,6 +62,15 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     await prisma.project.updateMany({
       where: { id: quote.projectId, pipelineStatus: { in: ['INQUIRY', 'QUOTED'] } },
       data: { pipelineStatus: 'BOOKED' },
+    });
+
+    await logActivity({
+      user,
+      action: 'CONVERT',
+      entityType: 'QUOTE',
+      entityId: quote.id,
+      entityLabel: quote.quoteNumber,
+      description: `Converted quotation ${quote.quoteNumber} to invoice ${invoice.invoiceNumber}.`,
     });
 
     return NextResponse.json({ invoice }, { status: 201 });

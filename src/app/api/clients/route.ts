@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { rankClients } from '@/lib/search-rank';
 import { composeContactName } from '@/lib/client-name';
+import { logActivity } from '@/lib/activity-log';
 
 const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 
@@ -110,6 +111,15 @@ export async function POST(request: NextRequest) {
         socials: socials || null,
         internalNotes: internalNotes || null,
       },
+    });
+
+    await logActivity({
+      user,
+      action: 'CREATE',
+      entityType: 'CLIENT',
+      entityId: client.id,
+      entityLabel: client.companyName,
+      description: `Added client ${client.companyName}.`,
     });
 
     return NextResponse.json({ client }, { status: 201 });

@@ -21,6 +21,7 @@ import { STAFF_TYPES, STAFF_TYPE_LABELS, type StaffType } from '@/lib/staff-type
 import { SKILL_DISCIPLINES, SKILL_LEVELS, type StaffSkill, type ExtraSkillTag } from '@/lib/skill-levels';
 import { PHOTOBOOTH_SKILL_CATEGORY_NAME } from '@/lib/staff-rate-card';
 import { formatDate } from '@/lib/utils';
+import { logCancelledAction } from '@/lib/log-cancel';
 
 interface StaffListItem {
   id: string;
@@ -147,6 +148,13 @@ function StaffPageInner() {
     });
     setSkillValues(skillValuesFromMember(member));
     setDialogOpen(true);
+  };
+
+  // Only worth logging when it was a create flow that got abandoned - closing an edit dialog just
+  // means someone looked without changing anything.
+  const handleDismiss = (next: boolean) => {
+    if (!next && editing === null) logCancelledAction('STAFF', 'Cancelled adding a new staff member.');
+    setDialogOpen(next);
   };
 
   const handleAddCategory = async (name: string, options: string[]) => {
@@ -327,7 +335,7 @@ function StaffPageInner() {
         </div>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleDismiss}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit Staff Member' : 'Add Staff Member'}</DialogTitle>
@@ -399,7 +407,7 @@ function StaffPageInner() {
             </div>
 
             <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => handleDismiss(false)} disabled={saving}>Cancel</Button>
               <Button type="submit" disabled={saving}>
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {editing ? 'Save Changes' : 'Add Staff Member'}

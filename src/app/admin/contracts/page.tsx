@@ -35,6 +35,7 @@ import {
 import { CONTRACT_TEMPLATES, renderContractTemplate } from '@/lib/contract-templates';
 import { SortSelect, useSavedChoice } from '@/components/sort-filter';
 import { byDate, byNumber, byText, sortItems, type SortChoice } from '@/lib/sorting';
+import { logCancelledAction } from '@/lib/log-cancel';
 
 interface InvoiceOption {
   id: string;
@@ -227,6 +228,11 @@ function ContractsPageInner() {
   const openCreateDialog = () => {
     loadInvoices();
     setDialogOpen(true);
+  };
+
+  const handleDismiss = (next: boolean) => {
+    if (!next) logCancelledAction('CONTRACT', 'Cancelled creating a new contract.');
+    setDialogOpen(next);
   };
 
   const handleCreateContract = async (e: React.FormEvent) => {
@@ -425,7 +431,7 @@ function ContractsPageInner() {
       </Card>
 
       {/* Create Contract Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleDismiss}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create New Client Agreement</DialogTitle>
@@ -506,7 +512,7 @@ function ContractsPageInner() {
             </div>
 
             <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={creating}>
+              <Button type="button" variant="outline" onClick={() => handleDismiss(false)} disabled={creating}>
                 Cancel
               </Button>
               <Button type="submit" disabled={creating || invoices.length === 0}>

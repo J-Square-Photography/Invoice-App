@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { deleteImpact } from '@/lib/delete-impact';
 import { composeContactName } from '@/lib/client-name';
 import { hasPermission } from '@/lib/permissions';
+import { logActivity } from '@/lib/activity-log';
 
 const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 
@@ -112,6 +113,15 @@ export async function PATCH(
       data: updateData,
     });
 
+    await logActivity({
+      user,
+      action: 'UPDATE',
+      entityType: 'CLIENT',
+      entityId: client.id,
+      entityLabel: client.companyName,
+      description: `Updated client ${client.companyName}.`,
+    });
+
     return NextResponse.json({ client });
   } catch (error) {
     console.error('Update client error:', error);
@@ -130,7 +140,15 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    await prisma.client.delete({ where: { id } });
+    const deleted = await prisma.client.delete({ where: { id } });
+    await logActivity({
+      user,
+      action: 'DELETE',
+      entityType: 'CLIENT',
+      entityId: id,
+      entityLabel: deleted.companyName,
+      description: `Deleted client ${deleted.companyName}.`,
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Delete client error:', error);

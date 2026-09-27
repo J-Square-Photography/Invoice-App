@@ -5,6 +5,7 @@ import { hasPermission } from '@/lib/permissions';
 import { calculateInvoiceTotals, parseStoredDiscounts } from '@/lib/invoice-calculations';
 import { isQuoteStatus } from '@/lib/quote-status';
 import { Prisma } from '@prisma/client';
+import { logActivity } from '@/lib/activity-log';
 
 const quoteInclude = {
   project: { include: { client: true } },
@@ -111,6 +112,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       });
     }
 
+    await logActivity({
+      user,
+      action: 'UPDATE',
+      entityType: 'QUOTE',
+      entityId: quote.id,
+      entityLabel: quote.quoteNumber,
+      description: `Updated quotation ${quote.quoteNumber}.`,
+    });
+
     return NextResponse.json({ quote });
   } catch (error) {
     console.error('Update quote error:', error);
@@ -125,7 +135,15 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
 
   const { id } = await params;
   try {
-    await prisma.quote.delete({ where: { id } });
+    const deleted = await prisma.quote.delete({ where: { id } });
+    await logActivity({
+      user,
+      action: 'DELETE',
+      entityType: 'QUOTE',
+      entityId: id,
+      entityLabel: deleted.quoteNumber,
+      description: `Deleted quotation ${deleted.quoteNumber}.`,
+    });
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });

@@ -22,6 +22,7 @@ import { useToast } from '@/components/ui/toast';
 import { UserPlus, Shield, ShieldCheck, Loader2, Trash2, Eye, EyeOff, Pencil, AlertTriangle, Check } from 'lucide-react';
 import { ResetDataDialog } from '@/components/reset-data-dialog';
 import { PERMISSION_KEYS, PERMISSION_LABELS, ESSENTIALS_PERMISSIONS, ALL_PERMISSIONS, type PermissionKey } from '@/lib/permissions';
+import { logCancelledAction } from '@/lib/log-cancel';
 
 interface TeamUser {
   id: string;
@@ -199,6 +200,13 @@ export default function TeamPage() {
     fetchUsers();
   }, [fetchUsers]);
 
+  // Cancel/X/backdrop/Escape on the Add dialog all funnel through here; a successful create closes
+  // the dialog by calling setDialogOpen(false) directly instead, so no cancel is logged there.
+  const handleDismissAdd = (next: boolean) => {
+    if (!next) logCancelledAction('USER', 'Cancelled adding a new team member.');
+    setDialogOpen(next);
+  };
+
   async function handleDeleteMember(userId: string, name: string) {
     if (!confirm(`Are you sure you want to permanently remove ${name}? This will delete their account credentials.`)) return;
     try {
@@ -364,7 +372,7 @@ export default function TeamPage() {
             <AlertTriangle className="mr-2 h-4 w-4 text-red-600" /> Delete All Data
           </Button>
 
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={handleDismissAdd}>
             <Button onClick={() => setDialogOpen(true)}>
               <UserPlus className="h-4 w-4 mr-2" />
               Add Team Member
@@ -438,7 +446,7 @@ export default function TeamPage() {
               </div>
               <PermissionsEditor role={newRole} value={newPermissions} onChange={setNewPermissions} />
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => handleDismissAdd(false)}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={creating}>

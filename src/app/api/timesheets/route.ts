@@ -15,6 +15,7 @@ import {
   photoboothHourlyRateFor,
 } from '@/lib/staff-rate-card';
 import type { StaffSkill } from '@/lib/skill-levels';
+import { logActivity } from '@/lib/activity-log';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -151,6 +152,15 @@ export async function POST(request: NextRequest) {
         update: {},
       }),
     ]);
+
+    await logActivity({
+      user,
+      action: 'CREATE',
+      entityType: 'TIMESHEET',
+      entityId: timesheet.id,
+      entityLabel: `${timesheet.staff.name} - ${timesheet.project.title}`,
+      description: `Logged a shift for ${timesheet.staff.name} on ${timesheet.project.title}.`,
+    });
 
     return NextResponse.json({ timesheet }, { status: 201 });
   } catch (error) {

@@ -6,6 +6,7 @@ import { cleanTags, legacyTypeForTags } from '@/lib/service-tags';
 import { isPipelineStatus, parseOptionalDate, cleanTitle } from '@/lib/project-validation';
 import { deleteImpact } from '@/lib/delete-impact';
 import { sanitizeRequestedCrew } from '@/lib/skill-levels';
+import { logActivity } from '@/lib/activity-log';
 
 export async function GET(
   request: NextRequest,
@@ -95,6 +96,15 @@ export async function PATCH(
       },
     });
 
+    await logActivity({
+      user,
+      action: 'UPDATE',
+      entityType: 'PROJECT',
+      entityId: project.id,
+      entityLabel: project.title,
+      description: `Updated project ${project.title}.`,
+    });
+
     return NextResponse.json({ project, impact: await deleteImpact({ projectId: id }) });
   } catch (error) {
     console.error('Update project error:', error);
@@ -113,7 +123,15 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    await prisma.project.delete({ where: { id } });
+    const deleted = await prisma.project.delete({ where: { id } });
+    await logActivity({
+      user,
+      action: 'DELETE',
+      entityType: 'PROJECT',
+      entityId: id,
+      entityLabel: deleted.title,
+      description: `Deleted project ${deleted.title}.`,
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Delete project error:', error);

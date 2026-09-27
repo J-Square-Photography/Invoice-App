@@ -8,6 +8,7 @@ import { getCompanySettings, toPublicPaymentConfig } from '@/lib/company-setting
 import { makeSnapshot, parseSnapshot, resolveCompany, snapshotForDb } from '@/lib/payment-snapshot';
 import { MANUAL_STATUSES, deriveStatus, toCents } from '@/lib/invoice-status';
 import { appendInternalNote } from '@/lib/internal-notes';
+import { logActivity } from '@/lib/activity-log';
 import { generatePayNowPayload, generatePayNowQRDataURL } from '@/lib/sgqr';
 import {
   calculateInvoiceTotals,
@@ -284,6 +285,19 @@ export async function PATCH(
       });
     });
 
+    await logActivity({
+      user,
+      action: voiding ? 'VOID' : unvoiding ? 'UNVOID' : 'UPDATE',
+      entityType: 'INVOICE',
+      entityId: invoice.id,
+      entityLabel: invoice.invoiceNumber,
+      description: voiding
+        ? `Voided invoice ${invoice.invoiceNumber}.`
+        : unvoiding
+          ? `Un-voided invoice ${invoice.invoiceNumber}.`
+          : `Updated invoice ${invoice.invoiceNumber}.`,
+    });
+
     return NextResponse.json({ invoice });
   } catch (error) {
     console.error('Update invoice error:', error);
@@ -342,6 +356,14 @@ export async function DELETE(
     await prisma.invoiceItem.deleteMany({ where: { invoiceId: id } });
 
     await prisma.invoice.delete({ where: { id } });
+    await logActivity({
+      user,
+      action: 'DELETE',
+      entityType: 'INVOICE',
+      entityId: id,
+      entityLabel: invoice.invoiceNumber,
+      description: `Deleted invoice ${invoice.invoiceNumber}.`,
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Delete invoice error:', error);

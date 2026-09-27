@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { Loader2 } from 'lucide-react';
+import { logCancelledAction } from '@/lib/log-cancel';
 
 export interface CreatedClient {
   id: string;
@@ -62,6 +63,12 @@ export function AddClientDialog({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  // Any close that isn't a successful save (Cancel button, X, backdrop, Escape all funnel here)
+  const handleDismiss = (next: boolean) => {
+    if (!next) logCancelledAction('CLIENT', 'Cancelled creating a new client.');
+    onOpenChange(next);
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -90,7 +97,7 @@ export function AddClientDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDismiss}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add New Client</DialogTitle>
@@ -129,7 +136,7 @@ export function AddClientDialog({
             <Textarea id="ac-internalNotes" name="internalNotes" rows={4} value={formData.internalNotes} onChange={handleInputChange} />
           </div>
           <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isCreating}>
+            <Button type="button" variant="outline" onClick={() => handleDismiss(false)} disabled={isCreating}>
               Cancel
             </Button>
             <Button type="submit" disabled={isCreating}>

@@ -7,6 +7,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { generateSigningToken } from '@/lib/audit-crypto';
 import { CONTRACT_TEMPLATES, renderContractTemplate } from '@/lib/contract-templates';
+import { logActivity } from '@/lib/activity-log';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -169,6 +170,15 @@ export async function POST(request: NextRequest) {
           },
         },
       },
+    });
+
+    await logActivity({
+      user,
+      action: 'CREATE',
+      entityType: 'CONTRACT',
+      entityId: contract.id,
+      entityLabel: contract.title,
+      description: `Created contract "${contract.title}" for invoice ${contract.invoice.invoiceNumber}.`,
     });
 
     return NextResponse.json({ contract }, { status: 201 });

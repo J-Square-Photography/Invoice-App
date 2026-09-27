@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { isStaffType } from '@/lib/staff-types';
 import { sanitizeSkills, sanitizeExtraSkills } from '@/lib/skill-levels';
+import { logActivity } from '@/lib/activity-log';
 
 const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 const cleanDecimal = (v: unknown): number | null => {
@@ -72,6 +73,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (isActive !== undefined) updateData.isActive = Boolean(isActive);
 
     const staff = await prisma.staff.update({ where: { id }, data: updateData });
+    await logActivity({
+      user,
+      action: 'UPDATE',
+      entityType: 'STAFF',
+      entityId: staff.id,
+      entityLabel: staff.name,
+      description: `Updated staff member ${staff.name}.`,
+    });
     return NextResponse.json({ staff });
   } catch (error) {
     console.error('Update staff error:', error);
@@ -86,7 +95,15 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { id } = await params;
   try {
-    await prisma.staff.delete({ where: { id } });
+    const deleted = await prisma.staff.delete({ where: { id } });
+    await logActivity({
+      user,
+      action: 'DELETE',
+      entityType: 'STAFF',
+      entityId: id,
+      entityLabel: deleted.name,
+      description: `Deleted staff member ${deleted.name}.`,
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Delete staff error:', error);

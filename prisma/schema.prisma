@@ -425,3 +425,20 @@ model PayslipProof {
 
   @@map("payslip_proofs")
 }
+
+// Admin-wide audit trail (Administration > Logs, Developer-only): who did what, when.
+// userId is a plain snapshot, not a relation, so a log entry survives the user being deleted later.
+model ActivityLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  userName    String
+  action      String // CREATE, UPDATE, DELETE, CANCEL, VOID, UNVOID, CONVERT, REVERT, DUPLICATE, VERIFY
+  entityType  String // STAFF, CLIENT, PROJECT, INVOICE, QUOTE, PAYMENT, USER, CONTRACT, TIMESHEET
+  entityId    String?
+  entityLabel String?
+  description String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("activity_logs")
+}

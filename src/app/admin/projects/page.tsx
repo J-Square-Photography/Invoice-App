@@ -23,6 +23,7 @@ import { SortSelect, PeriodSelect, useSavedChoice } from '@/components/sort-filt
 import { byDate, byNumber, byText, inPeriod, sortItems, PERIODS, type SortChoice } from '@/lib/sorting';
 import { byPipelineOrder } from '@/lib/project-order';
 import { formatDate } from '@/lib/utils';
+import { logCancelledAction } from '@/lib/log-cancel';
 import { RequestedCrewPicker } from '@/components/requested-crew-picker';
 import type { RequestedCrewItem } from '@/lib/skill-levels';
 
@@ -224,6 +225,11 @@ function ProjectsListPageInner() {
     }
   };
 
+  const handleDismiss = (next: boolean) => {
+    if (!next) logCancelledAction('PROJECT', 'Cancelled creating a new project.');
+    setIsDialogOpen(next);
+  };
+
   const visibleProjects = sortItems(projects.filter((p) => inPeriod(p.createdAt, addedPeriod)), SORT_CHOICES, sort);
 
   const getStatusBadgeVariant = (status: string) => {
@@ -372,7 +378,7 @@ function ProjectsListPageInner() {
         }}
       />
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={handleDismiss}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Project</DialogTitle>
@@ -530,7 +536,7 @@ function ProjectsListPageInner() {
             </div>
 
             <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => handleDismiss(false)}>
                 Cancel
               </Button>
               <Button type="submit">

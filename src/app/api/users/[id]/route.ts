@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser, hashPassword, invalidateUserCache } from '@/lib/auth';
 import { ROLES } from '@/lib/constants';
 import { ESSENTIALS_PERMISSIONS, sanitizePermissions } from '@/lib/permissions';
+import { logActivity } from '@/lib/activity-log';
 
 export async function PATCH(
   request: NextRequest,
@@ -91,6 +92,14 @@ export async function PATCH(
     });
 
     invalidateUserCache(id);
+    await logActivity({
+      user: currentUser,
+      action: 'UPDATE',
+      entityType: 'USER',
+      entityId: user.id,
+      entityLabel: user.name,
+      description: `Updated team member ${user.name} (${user.email}).`,
+    });
     return NextResponse.json({ user });
   } catch (error) {
     console.error('Update user error:', error);
@@ -142,14 +151,31 @@ export async function DELETE(
         },
       });
       invalidateUserCache(id);
+      await logActivity({
+        user: currentUser,
+        action: 'UPDATE',
+        entityType: 'USER',
+        entityId: user.id,
+        entityLabel: user.name,
+        description: `Deactivated team member ${user.name} (${user.email}).`,
+      });
       return NextResponse.json({ user, deleted: false });
     }
 
+    const deletedUser = await prisma.user.findUnique({ where: { id }, select: { name: true, email: true } });
     await prisma.user.delete({
       where: { id },
     });
 
     invalidateUserCache(id);
+    await logActivity({
+      user: currentUser,
+      action: 'DELETE',
+      entityType: 'USER',
+      entityId: id,
+      entityLabel: deletedUser?.name ?? null,
+      description: `Deleted team member ${deletedUser?.name ?? id} (${deletedUser?.email ?? 'unknown email'}).`,
+    });
     return NextResponse.json({ success: true, deleted: true });
   } catch (error) {
     console.error('Delete user error:', error);

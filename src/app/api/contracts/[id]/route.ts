@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
+import { logActivity } from '@/lib/activity-log';
 
 export async function GET(
   request: NextRequest,
@@ -58,6 +59,14 @@ export async function DELETE(
     }
 
     await prisma.contract.delete({ where: { id } });
+    await logActivity({
+      user,
+      action: 'DELETE',
+      entityType: 'CONTRACT',
+      entityId: id,
+      entityLabel: contract.title,
+      description: `Deleted contract "${contract.title}".`,
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Delete contract error:', error);

@@ -28,6 +28,7 @@ import {
   photoboothHourlyRateFor,
   type PhotoboothPackageTier,
 } from '@/lib/staff-rate-card';
+import { logCancelledAction } from '@/lib/log-cancel';
 
 interface TimesheetItem {
   id: string;
@@ -164,6 +165,12 @@ function TimesheetsPageInner() {
     setAssignedProjectIds(null);
     setShowAllProjects(false);
     setDialogOpen(true);
+  };
+
+  // Only worth logging when a create flow (no shift being edited) is abandoned
+  const handleDismiss = (next: boolean) => {
+    if (!next && editing === null) logCancelledAction('TIMESHEET', 'Cancelled logging a new shift.');
+    setDialogOpen(next);
   };
 
   // Restrict the Project picker to projects this staff member is already assigned to, so a shift
@@ -361,7 +368,7 @@ function TimesheetsPageInner() {
         </div>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleDismiss}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit Shift' : 'Log Shift'}</DialogTitle>
@@ -514,7 +521,7 @@ function TimesheetsPageInner() {
               <Textarea id="ts-notes" rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
             </div>
             <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => handleDismiss(false)} disabled={saving}>Cancel</Button>
               <Button type="submit" disabled={saving}>
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {editing ? 'Save Changes' : 'Log Shift'}

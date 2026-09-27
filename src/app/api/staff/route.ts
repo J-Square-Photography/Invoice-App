@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { isStaffType } from '@/lib/staff-types';
 import { sanitizeSkills, sanitizeExtraSkills } from '@/lib/skill-levels';
+import { logActivity } from '@/lib/activity-log';
 
 const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 const cleanDecimal = (v: unknown): number | null => {
@@ -91,6 +92,15 @@ export async function POST(request: NextRequest) {
         payNowNumber: clean(payNowNumber, 30),
         notes: clean(notes, 2000),
       },
+    });
+
+    await logActivity({
+      user,
+      action: 'CREATE',
+      entityType: 'STAFF',
+      entityId: staff.id,
+      entityLabel: staff.name,
+      description: `Added staff member ${staff.name}.`,
     });
 
     return NextResponse.json({ staff }, { status: 201 });

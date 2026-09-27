@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser, hashPassword } from '@/lib/auth';
 import { ROLES } from '@/lib/constants';
 import { ESSENTIALS_PERMISSIONS, sanitizePermissions } from '@/lib/permissions';
+import { logActivity } from '@/lib/activity-log';
 
 export async function GET() {
   const currentUser = await getCurrentUser();
@@ -102,6 +103,15 @@ export async function POST(request: NextRequest) {
         isActive: true,
         createdAt: true,
       },
+    });
+
+    await logActivity({
+      user: currentUser,
+      action: 'CREATE',
+      entityType: 'USER',
+      entityId: user.id,
+      entityLabel: user.name,
+      description: `Created team member ${user.name} (${user.email}, ${user.role}).`,
     });
 
     return NextResponse.json({ user }, { status: 201 });

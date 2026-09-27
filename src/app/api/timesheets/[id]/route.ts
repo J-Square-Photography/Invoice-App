@@ -15,6 +15,7 @@ import {
   photoboothHourlyRateFor,
 } from '@/lib/staff-rate-card';
 import type { StaffSkill } from '@/lib/skill-levels';
+import { logActivity } from '@/lib/activity-log';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -98,6 +99,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       data: updateData,
       include: { staff: { select: { id: true, name: true } }, project: { select: { id: true, title: true } } },
     });
+    await logActivity({
+      user,
+      action: 'UPDATE',
+      entityType: 'TIMESHEET',
+      entityId: timesheet.id,
+      entityLabel: `${timesheet.staff.name} - ${timesheet.project.title}`,
+      description: `Updated a shift for ${timesheet.staff.name} on ${timesheet.project.title}.`,
+    });
     return NextResponse.json({ timesheet });
   } catch (error) {
     console.error('Update timesheet error:', error);
@@ -112,12 +121,23 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { id } = await params;
   try {
-    const existing = await prisma.timesheet.findUnique({ where: { id }, select: { payslipId: true } });
+    const existing = await prisma.timesheet.findUnique({
+      where: { id },
+      select: { payslipId: true, staff: { select: { name: true } }, project: { select: { title: true } } },
+    });
     if (!existing) return NextResponse.json({ error: 'Timesheet not found' }, { status: 404 });
     if (existing.payslipId) {
       return NextResponse.json({ error: 'This shift has already been rolled into a payslip and is locked. Delete the payslip first.' }, { status: 409 });
     }
     await prisma.timesheet.delete({ where: { id } });
+    await logActivity({
+      user,
+      action: 'DELETE',
+      entityType: 'TIMESHEET',
+      entityId: id,
+      entityLabel: `${existing.staff.name} - ${existing.project.title}`,
+      description: `Deleted a shift for ${existing.staff.name} on ${existing.project.title}.`,
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Delete timesheet error:', error);

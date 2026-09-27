@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { defaultPaymentConfig } from '@/lib/payment-config';
 import { createDraftInvoice } from '@/lib/create-invoice';
+import { logActivity } from '@/lib/activity-log';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -109,6 +110,15 @@ export async function POST(request: NextRequest) {
       internalNotes,
       items,
       discounts: Array.isArray(discounts) ? discounts : [],
+    });
+
+    await logActivity({
+      user,
+      action: 'CREATE',
+      entityType: 'INVOICE',
+      entityId: invoice.id,
+      entityLabel: invoice.invoiceNumber,
+      description: `Created invoice ${invoice.invoiceNumber} for ${project.client.companyName}.`,
     });
 
     return NextResponse.json({ invoice }, { status: 201 });

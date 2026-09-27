@@ -5,6 +5,7 @@ import { hasPermission } from '@/lib/permissions';
 import { cleanTags, legacyTypeForTags } from '@/lib/service-tags';
 import { isPipelineStatus, parseOptionalDate, cleanTitle } from '@/lib/project-validation';
 import { sanitizeRequestedCrew } from '@/lib/skill-levels';
+import { logActivity } from '@/lib/activity-log';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -96,6 +97,15 @@ export async function POST(request: NextRequest) {
           select: { id: true, companyName: true, contactName: true },
         },
       },
+    });
+
+    await logActivity({
+      user,
+      action: 'CREATE',
+      entityType: 'PROJECT',
+      entityId: project.id,
+      entityLabel: project.title,
+      description: `Created project ${project.title} for ${project.client.companyName}.`,
     });
 
     return NextResponse.json({ project }, { status: 201 });

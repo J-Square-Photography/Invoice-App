@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { appendInternalNote } from '@/lib/internal-notes';
+import { logActivity } from '@/lib/activity-log';
 
 /**
  * Reverts a PAID invoice back to an open state: clears its payment ledger,
@@ -77,6 +78,15 @@ export async function POST(
     console.info(
       `Invoice ${existing.invoiceNumber} reverted from PAID by ${user.email}; cleared ${clearedCount} payment record(s).`
     );
+
+    await logActivity({
+      user,
+      action: 'REVERT',
+      entityType: 'PAYMENT',
+      entityId: invoice.id,
+      entityLabel: invoice.invoiceNumber,
+      description: `Reverted ${clearedCount} payment${clearedCount === 1 ? '' : 's'} (SGD $${totalReverted.toFixed(2)}) on invoice ${existing.invoiceNumber}.`,
+    });
 
     return NextResponse.json({
       invoice,

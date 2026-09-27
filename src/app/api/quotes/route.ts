@@ -5,6 +5,7 @@ import { hasPermission } from '@/lib/permissions';
 import { createQuote } from '@/lib/create-quote';
 import { isQuoteStatus } from '@/lib/quote-status';
 import { defaultPaymentConfig } from '@/lib/payment-config';
+import { logActivity } from '@/lib/activity-log';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -75,6 +76,15 @@ export async function POST(request: NextRequest) {
       notes,
       items,
       discounts: Array.isArray(discounts) ? discounts : [],
+    });
+
+    await logActivity({
+      user,
+      action: 'CREATE',
+      entityType: 'QUOTE',
+      entityId: quote.id,
+      entityLabel: quote.quoteNumber,
+      description: `Created quotation ${quote.quoteNumber} for ${quote.project.client.companyName}.`,
     });
 
     return NextResponse.json({ quote }, { status: 201 });

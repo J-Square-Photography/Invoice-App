@@ -26,6 +26,7 @@ import {
   Briefcase,
   Clock,
   Banknote,
+  ScrollText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LogoToggle } from '@/components/logo-toggle';
@@ -49,6 +50,7 @@ function adminNavItems(showSettings: boolean, showTeam: boolean) {
   const items: Array<{ name: string; href: string; icon: typeof Settings; developerOnly: boolean }> = [];
   if (showSettings) items.push({ name: 'Settings', href: '/admin/settings', icon: Settings, developerOnly: false });
   if (showTeam) items.push({ name: 'Team', href: '/admin/team', icon: UserCog, developerOnly: true });
+  if (showTeam) items.push({ name: 'Logs', href: '/admin/logs', icon: ScrollText, developerOnly: true });
   return items;
 }
 

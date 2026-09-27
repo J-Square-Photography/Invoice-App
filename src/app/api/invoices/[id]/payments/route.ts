@@ -7,6 +7,7 @@ import { deriveStatus, toCents } from '@/lib/invoice-status';
 import { parseProofDataUrl, hasPaymentEvidence, getStorageStatus } from '@/lib/payment-proof';
 import { ROLES } from '@/lib/constants';
 import { usesSamplePaymentDetails } from '@/lib/payment-config';
+import { logActivity } from '@/lib/activity-log';
 
 class PaymentRejected extends Error {
   constructor(message: string, public status = 400) {
@@ -135,6 +136,15 @@ export async function POST(
           },
         },
       });
+    });
+
+    await logActivity({
+      user,
+      action: 'UPDATE',
+      entityType: 'PAYMENT',
+      entityId: updatedInvoice.id,
+      entityLabel: updatedInvoice.invoiceNumber,
+      description: `Recorded a payment of SGD $${parsedAmount.toFixed(2)} on invoice ${updatedInvoice.invoiceNumber}.`,
     });
 
     return NextResponse.json({

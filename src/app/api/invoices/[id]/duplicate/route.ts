@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { parseStoredDiscounts } from '@/lib/invoice-calculations';
 import { createDraftInvoice } from '@/lib/create-invoice';
+import { logActivity } from '@/lib/activity-log';
 
 /**
  * Copies an invoice into a new DRAFT for the same project: same line items, discounts,
@@ -36,6 +37,15 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         amount: Number(i.amount),
       })),
       discounts: parseStoredDiscounts(source.discounts),
+    });
+
+    await logActivity({
+      user,
+      action: 'DUPLICATE',
+      entityType: 'INVOICE',
+      entityId: invoice.id,
+      entityLabel: invoice.invoiceNumber,
+      description: `Duplicated invoice ${source.invoiceNumber} into new invoice ${invoice.invoiceNumber}.`,
     });
 
     return NextResponse.json({ invoice }, { status: 201 });

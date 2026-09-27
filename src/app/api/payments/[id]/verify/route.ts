@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { ROLES } from '@/lib/constants';
+import { logActivity } from '@/lib/activity-log';
 
 /**
  * A Developer confirms they checked the bank and the money really arrived (or clears that
@@ -22,6 +23,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const payment = await prisma.paymentLog.update({
       where: { id },
       data: verified ? { verifiedAt: new Date(), verifiedBy: user.name || user.email } : { verifiedAt: null, verifiedBy: null },
+      include: { invoice: { select: { invoiceNumber: true } } },
+    });
+    await logActivity({
+      user,
+      action: 'VERIFY',
+      entityType: 'PAYMENT',
+      entityId: payment.id,
+      entityLabel: payment.invoice.invoiceNumber,
+      description: verified
+        ? `Verified a payment of SGD $${Number(payment.amountPaid).toFixed(2)} on invoice ${payment.invoice.invoiceNumber}.`
+        : `Cleared verification on a payment on invoice ${payment.invoice.invoiceNumber}.`,
     });
     return NextResponse.json({ payment });
   } catch {

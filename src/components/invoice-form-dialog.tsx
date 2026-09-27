@@ -29,6 +29,7 @@ import { PHOTOBOOTH_PACKAGES } from '@/lib/photobooth-presets';
 import { SERVICE_CATALOGUE, findServiceItem } from '@/lib/service-presets';
 import { tagLabel } from '@/lib/service-tags';
 import { singaporeDateParts } from '@/lib/time';
+import { logCancelledAction } from '@/lib/log-cancel';
 
 interface DiscountRow {
   name: string;
@@ -350,8 +351,14 @@ export function InvoiceFormDialog({
 
   const paid = invoice ? Number(invoice.paidAmount) : 0;
 
+  // Only worth logging when a create flow (not editing an existing record) is abandoned
+  const handleDismiss = (next: boolean) => {
+    if (!next && !isEdit) logCancelledAction(isQuote ? 'QUOTE' : 'INVOICE', `Cancelled creating a new ${noun}.`);
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDismiss}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEdit ? `Edit ${isQuote ? 'Quotation' : 'Invoice'} ${invoice?.invoiceNumber}` : isQuote ? 'Create New Quotation' : 'Create New Invoice'}</DialogTitle>
@@ -859,7 +866,7 @@ export function InvoiceFormDialog({
           )}
 
           <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            <Button type="button" variant="outline" onClick={() => handleDismiss(false)} disabled={saving}>
               Cancel
             </Button>
             <Button type="submit" disabled={saving || projects.length === 0}>
