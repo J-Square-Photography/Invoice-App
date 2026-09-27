@@ -28,7 +28,9 @@ type TextKey =
   | 'bankBranchCode'
   | 'bankAccountName'
   | 'gstRegNo'
-  | 'address';
+  | 'address'
+  | 'email'
+  | 'website';
 
 type SettingsValues = Record<TextKey, string>;
 
@@ -102,6 +104,20 @@ const FIELDS: Array<{
     label: 'Business Address',
     help: 'Printed in the header of your invoices. Leave blank to omit it.',
     effect: 'the business address shown on new and draft invoices',
+    optional: true,
+  },
+  {
+    key: 'email',
+    label: 'Company Email',
+    help: 'Printed in the header of your invoices. Leave blank to omit it.',
+    effect: 'the contact email shown on new and draft invoices',
+    optional: true,
+  },
+  {
+    key: 'website',
+    label: 'Company Website',
+    help: 'Printed in the header of your invoices, e.g. www.jsquarephotography.com. Leave blank to omit it.',
+    effect: 'the website shown on new and draft invoices',
     optional: true,
   },
 ];

@@ -32,6 +32,20 @@ const TEXT_FIELDS: Record<string, { label: string; max: number; pattern?: RegExp
     hint: 'Use 5 to 200 characters on a single line, e.g. 123 Example Road, #01-23, Singapore 123456.',
     optional: true,
   },
+  email: {
+    label: 'Company email',
+    max: 100,
+    pattern: /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/,
+    hint: 'Use a valid email address, e.g. contact@jsquarephotography.com.',
+    optional: true,
+  },
+  website: {
+    label: 'Company website',
+    max: 100,
+    pattern: /^[^\s<>]{3,100}$/,
+    hint: 'Use a website address, e.g. www.jsquarephotography.com.',
+    optional: true,
+  },
 };
 
 export async function GET() {

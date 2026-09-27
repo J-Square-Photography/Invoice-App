@@ -9,6 +9,10 @@ export interface CompanyPaymentConfig {
   gstRegNo: string;
   /** Business address printed on invoices. Empty until set in Settings. */
   address: string;
+  /** Contact email printed on invoices. Empty until set in Settings. */
+  email: string;
+  /** Website printed on invoices. Empty until set in Settings. */
+  website: string;
   isGstRegistered: boolean;
   gstRate: number;
 }
@@ -22,6 +26,8 @@ export const defaultPaymentConfig: CompanyPaymentConfig = {
   bankAccountName: process.env.COMPANY_BANK_ACCOUNT_NAME || 'J SQUARE PHOTOGRAPHY',
   gstRegNo: process.env.COMPANY_GST_REG_NO || '',
   address: process.env.COMPANY_ADDRESS || '',
+  email: process.env.COMPANY_EMAIL || '',
+  website: process.env.COMPANY_WEBSITE || '',
   isGstRegistered: true,
   gstRate: 9, // Singapore 9% GST
 };

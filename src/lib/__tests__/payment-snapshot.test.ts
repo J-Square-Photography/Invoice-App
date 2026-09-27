@@ -11,6 +11,8 @@ const live: CompanySettingsView = {
   bankAccountName: 'NEW NAME',
   gstRegNo: 'M90376150R',
   address: '1 Test Road, Singapore 123456',
+  email: 'contact@example.com',
+  website: 'www.example.com',
   isGstRegistered: true,
   gstRate: 9,
   staticQrDataUrl: 'data:image/png;base64,AAAA',

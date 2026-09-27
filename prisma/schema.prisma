@@ -41,6 +41,8 @@ model CompanySettings {
   bankAccountName   String?
   gstRegNo          String?
   address           String?
+  email             String?
+  website           String?
   staticQrDataUrl   String?  @db.Text
   updatedBy         String?
   updatedAt         DateTime @updatedAt

@@ -11,6 +11,8 @@ const COMPANY = {
   bankAccountName: 'J SQUARE PHOTOGRAPHY',
   gstRegNo: '',
   address: '',
+  email: '',
+  website: '',
   isGstRegistered: true,
   gstRate: 9,
 };

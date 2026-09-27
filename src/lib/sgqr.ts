@@ -132,7 +132,7 @@ export async function generatePayNowQRDataURL(
     margin: 2,
     width: 280,
     color: {
-      dark: '#7B1113', // Singapore PayNow signature burgundy or dark neutral
+      dark: '#0E0E0D', // brand Ink
       light: '#FFFFFF',
     },
     ...qrOptions,

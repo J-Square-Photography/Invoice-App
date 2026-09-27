@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
+﻿import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
 import { defaultPaymentConfig, type CompanyPaymentConfig } from './payment-config';
 import { generatePayNowPayload, generatePayNowQRDataURL } from './sgqr';
 import { discountName, discountTerms } from './invoice-calculations';
@@ -55,17 +55,16 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   type Font = typeof fontRegular;
   type Colour = ReturnType<typeof rgb>;
 
-  // --- Look: our burgundy + greys, with bold outer edges and soft inner lines ---
-  const black = rgb(0.1, 0.1, 0.1);
-  const darkGray = rgb(0.3, 0.3, 0.3);
-  const lightGray = rgb(0.55, 0.55, 0.55);
-  const STRONG = rgb(0.22, 0.22, 0.22); // bold outer edges
-  const SOFT = rgb(0.86, 0.86, 0.86); // soft but visible dividers
-  const TINT = rgb(0.955, 0.955, 0.955);
-  const accentRed = rgb(0.48, 0.07, 0.08); // Singapore PayNow burgundy
-  const accentTint = rgb(0.985, 0.94, 0.94);
-  const accentGold = rgb(0.85, 0.65, 0.13);
-  const green = rgb(0.1, 0.6, 0.2);
+  // --- Look: the J Square brand system (Ink / Brass), with bold outer edges and soft inner lines ---
+  const ink = rgb(14 / 255, 14 / 255, 13 / 255); // brand Ink #0E0E0D - headings, body text, strong fills
+  const slate = rgb(0.32, 0.31, 0.29); // secondary text (dates, contact info, bank details)
+  const faint = rgb(0.58, 0.57, 0.54); // tertiary text (footer, page numbers)
+  const STRONG = rgb(0.2, 0.19, 0.18); // bold outer edges
+  const SOFT = rgb(0.85, 0.84, 0.81); // soft but visible dividers
+  const TINT = rgb(0.955, 0.953, 0.948);
+  const brass = rgb(199 / 255, 154 / 255, 78 / 255); // brand Brass #C79A4E - the one focal accent per page
+  const brassTint = rgb(0.978, 0.96, 0.93);
+  const green = rgb(0.1, 0.6, 0.2); // PAID status - a universal payment colour, kept outside the brand palette
   const white = rgb(1, 1, 1);
 
   const [W, H] = PageSizes.A4; // 595.28 x 841.89 pt
@@ -200,12 +199,12 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     new Date(d).toLocaleDateString('en-SG', { year: 'numeric', month: 'short', day: 'numeric' });
 
   // ============ 1. TOP BAND + HEADER ============
-  fillBox(M, H - 48, CW, 8, accentRed);
+  fillBox(M, H - 48, CW, 8, brass);
 
   // The studio's own name, shrunk to fit rather than overlapping the right-aligned block if it's long
   const studioName = fitSize(cfg.companyName.toUpperCase(), 20, fontBold, CW - 230, 11);
-  text(studioName.text, M, H - 82, studioName.size, fontBold, black);
-  text('PHOTOGRAPHY  \u00B7  VIDEOGRAPHY  \u00B7  PHOTOBOOTH', M, H - 96, 7.5, fontRegular, lightGray);
+  text(studioName.text, M, H - 82, studioName.size, fontBold, ink);
+  text('PHOTOGRAPHY  \u00B7  VIDEOGRAPHY  \u00B7  PHOTOBOOTH', M, H - 96, 7.5, fontRegular, faint);
 
   // Company block, right-aligned. The GST registration number appears once one is set in Settings.
   const ADDR_MAX_LINES = 3;
@@ -217,21 +216,22 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   const companyLines = [
     `UEN: ${cfg.uen}`,
     ...(cfg.gstRegNo ? [`GST Reg No: ${cfg.gstRegNo}`] : []),
-    'contact@jsquarephotography.com',
+    ...(cfg.email ? [cfg.email] : []),
+    ...(cfg.website ? [cfg.website] : []),
     // The business address from Settings; plain 'Singapore' until one is set
     ...(cfg.address ? addrLines : ['Singapore']),
   ];
-  companyLines.forEach((line, i) => textRight(line, RIGHT, H - 72 - i * 11, 8.5, fontRegular, darkGray));
+  companyLines.forEach((line, i) => textRight(line, RIGHT, H - 72 - i * 11, 8.5, fontRegular, slate));
 
   // ============ 2. TITLE ROW ============
   // A document that charges GST is a Tax Invoice
-  text(isQuote ? 'Quotation' : data.isGstApplied ? 'Tax Invoice' : 'Invoice', M, H - 140, 24, fontBold, black);
-  text(`Issued on ${fmtDate(data.issueDate)}`, M, H - 154, 8.5, fontRegular, darkGray);
+  text(isQuote ? 'Quotation' : data.isGstApplied ? 'Tax Invoice' : 'Invoice', M, H - 140, 24, fontBold, ink);
+  text(`Issued on ${fmtDate(data.issueDate)}`, M, H - 154, 8.5, fontRegular, slate);
 
-  textRight(`${isQuote ? 'Quotation' : 'Invoice'} #${data.invoiceNumber}`, RIGHT, H - 134, 12, fontBold, black);
+  textRight(`${isQuote ? 'Quotation' : 'Invoice'} #${data.invoiceNumber}`, RIGHT, H - 134, 12, fontBold, ink);
   const statusColor = isQuote
-    ? data.status === 'ACCEPTED' ? green : data.status === 'DECLINED' ? lightGray : STRONG
-    : data.status === 'PAID' ? green : data.status === 'PARTIAL' ? accentGold : accentRed;
+    ? data.status === 'ACCEPTED' ? green : data.status === 'DECLINED' ? faint : STRONG
+    : data.status === 'PAID' ? green : data.status === 'PARTIAL' ? brass : STRONG;
   const statusLabel = isQuote
     ? data.status === 'ACCEPTED' || data.status === 'DECLINED' ? `${data.status}` : `VALID UNTIL ${fmtDate(data.dueDate).toUpperCase()}`
     : `STATUS: ${data.status}`;
@@ -281,15 +281,15 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   vLine(x2, stripTop, stripTop - stripH, RULE, SOFT);
   vLine(x3, stripTop, stripTop - stripH, RULE, SOFT);
 
-  const label = (s: string, x: number, y: number) => text(s, x, y, 7.5, fontBold, accentRed);
+  const label = (s: string, x: number, y: number) => text(s, x, y, 7.5, fontBold, ink);
   label(isQuote ? 'QUOTATION FOR' : 'INVOICE TO', M + 10, stripTop - 15);
-  clientName.lines.forEach((l, i) => text(l, M + 10, stripTop - 31 - i * 13, clientName.size, fontBold, black));
+  clientName.lines.forEach((l, i) => text(l, M + 10, stripTop - 31 - i * 13, clientName.size, fontBold, ink));
   let contactY = stripTop - 45 - nameExtraLines * 13;
   contactBlocks.forEach((block) => {
-    block.lines.forEach((l, i) => text(l, M + 10, contactY - i * 10, block.size, fontRegular, darkGray));
+    block.lines.forEach((l, i) => text(l, M + 10, contactY - i * 10, block.size, fontRegular, slate));
     contactY -= 12 + (block.lines.length - 1) * 10;
   });
-  clientAddressLines.forEach((l, i) => text(l, M + 10, contactY - i * 11, 8.5, fontRegular, darkGray));
+  clientAddressLines.forEach((l, i) => text(l, M + 10, contactY - i * 11, 8.5, fontRegular, slate));
 
   label('PROJECT / ASSIGNMENT', x2 + 10, stripTop - 15);
   const allProjectLines = wrap(data.projectTitle, 11, fontBold, c2 - 20);
@@ -298,22 +298,21 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     // keep the second line honest: show that the title continues
     projectLines[1] = fit(`${projectLines[1]} ${allProjectLines.slice(2).join(' ')}`, 11, fontBold, c2 - 20);
   }
-  projectLines.forEach((l, i) => text(l, x2 + 10, stripTop - 31 - i * 13, 11, fontBold, black));
+  projectLines.forEach((l, i) => text(l, x2 + 10, stripTop - 31 - i * 13, 11, fontBold, ink));
   if (data.client.uen) {
     const uenLine = fitSize(`Client UEN: ${data.client.uen}`, 9, fontRegular, c2 - 20, 6.5);
-    text(uenLine.text, x2 + 10, stripTop - 31 - projectLines.length * 13 - 3, uenLine.size, fontRegular, darkGray);
+    text(uenLine.text, x2 + 10, stripTop - 31 - projectLines.length * 13 - 3, uenLine.size, fontRegular, slate);
   }
 
   label('DATES', x3 + 10, stripTop - 15);
-  text('Issued', x3 + 10, stripTop - 30, 7.5, fontRegular, lightGray);
-  text(fmtDate(data.issueDate), x3 + 10, stripTop - 41, 9, fontRegular, black);
-  text(isQuote ? 'Valid until' : 'Due', x3 + 10, stripTop - 55, 7.5, fontRegular, lightGray);
-  text(fmtDate(data.dueDate), x3 + 10, stripTop - 66, 9, fontBold, isQuote || data.status === 'PAID' ? black : accentRed);
+  text('Issued', x3 + 10, stripTop - 30, 7.5, fontRegular, faint);
+  text(fmtDate(data.issueDate), x3 + 10, stripTop - 41, 9, fontRegular, ink);
+  text(isQuote ? 'Valid until' : 'Due', x3 + 10, stripTop - 55, 7.5, fontRegular, faint);
+  text(fmtDate(data.dueDate), x3 + 10, stripTop - 66, 9, fontBold, ink);
 
   // ============ 4. ITEMS TABLE ============
   const HEADER_H = 22;
   const ROW_MIN = 24;
-  const MIN_ROWS = 4; // short invoices are padded with empty rows so the grid always looks complete
   const qtyX = M + 285;
   const unitX = qtyX + 50;
   const amtX = unitX + 80;
@@ -325,10 +324,10 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   const drawTableHeader = () => {
     fillBox(M, y - HEADER_H, CW, HEADER_H, TINT);
-    text('DESCRIPTION', M + cellPad, y - 15, 8, fontBold, black);
-    textCentre('QTY', (qtyX + unitX) / 2, y - 15, 8, fontBold, black);
-    textRight('UNIT PRICE', amtX - cellPad, y - 15, 8, fontBold, black);
-    textRight('AMOUNT (SGD)', RIGHT - cellPad, y - 15, 8, fontBold, black);
+    text('DESCRIPTION', M + cellPad, y - 15, 8, fontBold, ink);
+    textCentre('QTY', (qtyX + unitX) / 2, y - 15, 8, fontBold, ink);
+    textRight('UNIT PRICE', amtX - cellPad, y - 15, 8, fontBold, ink);
+    textRight('AMOUNT (SGD)', RIGHT - cellPad, y - 15, 8, fontBold, ink);
     y -= HEADER_H;
   };
   // Bold outer edge and soft column dividers around the part of the table drawn on this page
@@ -341,10 +340,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   drawTableHeader();
 
-  const rows: Array<(typeof data.items)[number] | null> = [...data.items];
-  while (rows.length < MIN_ROWS) rows.push(null);
-
-  for (const item of rows) {
+  for (const item of data.items) {
     const lines = item ? wrap(item.description, 9, fontRegular, descW) : [];
     const rowH = Math.max(ROW_MIN, lines.length * 11.5 + 12);
     if (y - rowH < FOOTER_Y + 60) {
@@ -355,15 +351,15 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
       drawTableHeader();
     }
     if (item) {
-      lines.forEach((l, i) => text(l, M + cellPad, y - 15 - i * 11.5, 9, fontRegular, black));
-      textCentre(String(item.quantity), (qtyX + unitX) / 2, y - 15, 9, fontRegular, darkGray);
+      lines.forEach((l, i) => text(l, M + cellPad, y - 15 - i * 11.5, 9, fontRegular, ink));
+      textCentre(String(item.quantity), (qtyX + unitX) / 2, y - 15, 9, fontRegular, slate);
       if (item.amount === 0) {
         // A no-charge line (e.g. "Culling and editing") reads as included rather than $0.00
-        textRight('-', amtX - cellPad, y - 15, 9, fontRegular, lightGray);
-        textRight('Included', RIGHT - cellPad, y - 15, 9, fontRegular, darkGray);
+        textRight('-', amtX - cellPad, y - 15, 9, fontRegular, faint);
+        textRight('Included', RIGHT - cellPad, y - 15, 9, fontRegular, slate);
       } else {
-        textRight(money(item.unitPrice), amtX - cellPad, y - 15, 9, fontRegular, darkGray);
-        textRight(money(item.amount), RIGHT - cellPad, y - 15, 9, fontBold, black);
+        textRight(money(item.unitPrice), amtX - cellPad, y - 15, 9, fontRegular, slate);
+        textRight(money(item.amount), RIGHT - cellPad, y - 15, 9, fontBold, ink);
       }
     }
     y -= rowH;
@@ -415,27 +411,27 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   for (const r of totalsRows) {
     const h = rowHeight(r.kind);
     if (r.kind === 'total') fillBox(TX, ty - h, TW, h, TINT);
-    if (r.kind === 'balance') fillBox(TX, ty - h, TW, h, accentTint);
+    if (r.kind === 'balance') fillBox(TX, ty - h, TW, h, brassTint);
     const baseline = ty - h / 2 - 3;
     if (r.kind === 'total') {
-      text(r.label, TX + 10, baseline, 9.5, fontBold, black);
-      textRight(r.value, RIGHT - 10, baseline, 11, fontBold, black);
+      text(r.label, TX + 10, baseline, 9.5, fontBold, ink);
+      textRight(r.value, RIGHT - 10, baseline, 11, fontBold, ink);
     } else if (r.kind === 'balance') {
-      text(r.label, TX + 10, baseline, 9.5, fontBold, accentRed);
-      textRight(r.value, RIGHT - 10, baseline, 11.5, fontBold, accentRed);
+      text(r.label, TX + 10, baseline, 9.5, fontBold, ink);
+      textRight(r.value, RIGHT - 10, baseline, 11.5, fontBold, ink);
     } else if (r.kind === 'discount') {
       const amountW = measure(r.value, 9, fontRegular);
-      text(fit(r.label, 9, fontRegular, TW - 20 - amountW - 8), TX + 10, baseline, 9, fontRegular, darkGray);
+      text(fit(r.label, 9, fontRegular, TW - 20 - amountW - 8), TX + 10, baseline, 9, fontRegular, slate);
       textRight(r.value, RIGHT - 10, baseline, 9, fontRegular, green);
     } else if (r.kind === 'paid') {
       text(r.label, TX + 10, baseline, 9, fontRegular, green);
       textRight(r.value, RIGHT - 10, baseline, 9, fontBold, green);
     } else if (r.kind === 'bold') {
-      text(r.label, TX + 10, baseline, 9, fontBold, darkGray);
-      textRight(r.value, RIGHT - 10, baseline, 9, fontBold, black);
+      text(r.label, TX + 10, baseline, 9, fontBold, slate);
+      textRight(r.value, RIGHT - 10, baseline, 9, fontBold, ink);
     } else {
-      text(r.label, TX + 10, baseline, 9, fontRegular, darkGray);
-      textRight(r.value, RIGHT - 10, baseline, 9, fontRegular, black);
+      text(r.label, TX + 10, baseline, 9, fontRegular, slate);
+      textRight(r.value, RIGHT - 10, baseline, 9, fontRegular, ink);
     }
     ty -= h;
     // soft divider between rows; a stronger one above the total
@@ -451,7 +447,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   if (noteLines.length > 0) {
     edgeBox(M, ly - notesH, LW, notesH, SOFT, 1);
     label('NOTES', M + 10, ly - 15);
-    noteLines.forEach((l, i) => text(l, M + 10, ly - 28 - i * 11, 8.5, fontRegular, darkGray));
+    noteLines.forEach((l, i) => text(l, M + 10, ly - 28 - i * 11, 8.5, fontRegular, slate));
     ly -= notesH + 12;
   }
 
@@ -459,7 +455,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   fillBox(M, ly - 22, LW, 22, TINT);
   hLine(M, M + LW, ly - 22, RULE, SOFT);
   edgeBox(M, ly - PAY_H, LW, PAY_H);
-  text(isQuote ? 'HOW TO ACCEPT' : 'PAYMENT INSTRUCTIONS', M + 12, ly - 15, 9.5, fontBold, accentRed);
+  text(isQuote ? 'HOW TO ACCEPT' : 'PAYMENT INSTRUCTIONS', M + 12, ly - 15, 9.5, fontBold, ink);
   const px = M + 12;
   const pw = LW - 24;
   let py = ly - 38;
@@ -471,23 +467,23 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
       'We will then issue an invoice for payment.',
       'All prices are in Singapore dollars (SGD).',
     ];
-    acceptLines.forEach((l, i) => text(fit(l, 8.5, fontRegular, pw), px, py - i * 13, 8.5, fontRegular, i === 0 ? black : darkGray));
+    acceptLines.forEach((l, i) => text(fit(l, 8.5, fontRegular, pw), px, py - i * 13, 8.5, fontRegular, i === 0 ? ink : slate));
   } else {
-  text('1. Bank Transfer', px, py, 8.5, fontBold, black);
+  text('1. Bank Transfer', px, py, 8.5, fontBold, ink);
   py -= 12;
-  text(fit(`Bank: ${cfg.bankName}${cfg.bankBranchCode ? ` (Branch: ${cfg.bankBranchCode})` : ''}`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, darkGray);
+  text(fit(`Bank: ${cfg.bankName}${cfg.bankBranchCode ? ` (Branch: ${cfg.bankBranchCode})` : ''}`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, slate);
   py -= 11;
-  text(fit(`A/C No: ${cfg.bankAccountNumber} (${cfg.bankAccountName})`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, darkGray);
+  text(fit(`A/C No: ${cfg.bankAccountNumber} (${cfg.bankAccountName})`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, slate);
   py -= 16;
-  text('2. PayNow (UEN)', px, py, 8.5, fontBold, black);
+  text('2. PayNow (UEN)', px, py, 8.5, fontBold, ink);
   py -= 12;
-  text(fit(`UEN: ${cfg.uen} (${cfg.companyName})`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, darkGray);
+  text(fit(`UEN: ${cfg.uen} (${cfg.companyName})`, 8, fontRegular, pw - 10), px + 10, py, 8, fontRegular, slate);
   py -= 16;
-  text('3. Scan with any Singapore bank app', px, py, 8.5, fontBold, black);
+  text('3. Scan with any Singapore bank app', px, py, 8.5, fontBold, ink);
   py -= 12;
-  text('DBS PayLah!, OCBC, UOB, GrabPay', px + 10, py, 8, fontRegular, darkGray);
+  text('DBS PayLah!, OCBC, UOB, GrabPay', px + 10, py, 8, fontRegular, slate);
   py -= 11;
-  text(`Ref: ${data.invoiceNumber}`, px + 10, py, 8, fontBold, accentRed);
+  text(`Ref: ${data.invoiceNumber}`, px + 10, py, 8, fontBold, ink);
   }
 
   // --- PayNow QR, centred under the totals (invoices only) ---
@@ -515,8 +511,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     const qrTop = zoneTop - totalsH - 14;
     const qrBottom = qrTop - QR_SIZE;
     page.drawImage(qrImage, { x: centreX - QR_SIZE / 2, y: qrBottom, width: QR_SIZE, height: QR_SIZE });
-    textCentre(staticQr ? 'PayNow QR' : 'PayNow SGQR', centreX, qrBottom - 12, 8, fontBold, accentRed);
-    textCentre(staticQr ? `Enter SGD $${qrAmount.toFixed(2)}` : `Scan SGD $${qrAmount.toFixed(2)}`, centreX, qrBottom - 22, 7.5, fontRegular, darkGray);
+    textCentre(staticQr ? 'PayNow QR' : 'PayNow SGQR', centreX, qrBottom - 12, 8, fontBold, ink);
+    textCentre(staticQr ? `Enter SGD $${qrAmount.toFixed(2)}` : `Scan SGD $${qrAmount.toFixed(2)}`, centreX, qrBottom - 22, 7.5, fontRegular, slate);
   } catch (err) {
     if (!(err instanceof SkipQr)) console.error('Failed to embed SGQR code in PDF:', err);
   }
@@ -524,9 +520,9 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   // ============ 6. FOOTER (every page) ============
   pages.forEach((p, i) => {
     p.drawLine({ start: { x: M, y: FOOTER_Y + 15 }, end: { x: RIGHT, y: FOOTER_Y + 15 }, thickness: RULE, color: SOFT });
-    drawOn(p, `Thank you for partnering with ${cfg.companyName}. All rights reserved.`, M, FOOTER_Y, 8, fontOblique, lightGray);
+    drawOn(p, `Thank you for partnering with ${cfg.companyName}.`, M, FOOTER_Y, 8, fontOblique, faint);
     const label = `Page ${i + 1} of ${pages.length}`;
-    p.drawText(label, { x: RIGHT - fontRegular.widthOfTextAtSize(label, 8), y: FOOTER_Y, size: 8, font: fontRegular, color: lightGray });
+    p.drawText(label, { x: RIGHT - fontRegular.widthOfTextAtSize(label, 8), y: FOOTER_Y, size: 8, font: fontRegular, color: faint });
   });
 
   return pdfDoc.save();

@@ -34,6 +34,9 @@ export async function getCompanySettings(): Promise<CompanySettingsView> {
     bankAccountName: pick(row?.bankAccountName, defaultPaymentConfig.bankAccountName),
     gstRegNo: pick(row?.gstRegNo, defaultPaymentConfig.gstRegNo),
     address: pick(row?.address, defaultPaymentConfig.address),
+    // Optional: once Settings has been saved, a blank email/website stays blank instead of reverting to the default
+    email: row ? (row.email ?? '').trim() : defaultPaymentConfig.email,
+    website: row ? (row.website ?? '').trim() : defaultPaymentConfig.website,
     isGstRegistered: defaultPaymentConfig.isGstRegistered,
     gstRate: defaultPaymentConfig.gstRate,
     staticQrDataUrl: row?.staticQrDataUrl ?? null,
