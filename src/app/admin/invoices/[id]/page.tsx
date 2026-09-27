@@ -69,6 +69,7 @@ interface InvoiceDetail {
   status: string;
   paymentMethod: string | null;
   notes: string | null;
+  internalNotes: string | null;
   project: {
     id: string;
     title: string;
@@ -700,6 +701,18 @@ export default function InvoiceDetailPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-neutral-700 whitespace-pre-wrap">{invoice.notes}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Internal Notes Card - admin-only, never shown to the client or printed on the PDF */}
+          {invoice.internalNotes && (
+            <Card className="border-amber-200 bg-amber-50/40">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-semibold uppercase text-amber-700">Internal Notes (Admin Only)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-neutral-700 whitespace-pre-wrap">{invoice.internalNotes}</p>
               </CardContent>
             </Card>
           )}

@@ -10,6 +10,8 @@ export interface NewInvoiceInput {
   isGstApplied: boolean;
   gstRate: number;
   notes?: string | null;
+  /** Admin-only remarks (e.g. "Converted from quotation..."). Never shown to the client or printed on the PDF. */
+  internalNotes?: string | null;
   items: RawInvoiceItemInput[];
   discounts?: RawDiscountInput[];
 }
@@ -47,6 +49,7 @@ export async function createDraftInvoice(input: NewInvoiceInput) {
           status: 'DRAFT',
           paymentMethod: input.paymentMethod,
           notes: input.notes || null,
+          internalNotes: input.internalNotes || null,
           items: { create: totals.items },
         },
         include: {

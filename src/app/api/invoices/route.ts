@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
       isGstApplied = defaultPaymentConfig.isGstRegistered,
       gstRate = defaultPaymentConfig.gstRate,
       notes,
+      internalNotes,
       items = [],
       discounts = [],
     } = body;
@@ -105,6 +106,7 @@ export async function POST(request: NextRequest) {
       isGstApplied,
       gstRate,
       notes,
+      internalNotes,
       items,
       discounts: Array.isArray(discounts) ? discounts : [],
     });

@@ -127,6 +127,8 @@ model Invoice {
   // src/lib/payment-snapshot.ts). Null while DRAFT: drafts follow Settings.
   paymentSnapshot     Json?
   notes               String?
+  // Admin-only remarks (e.g. "Converted from quotation QUO-..."). Never shown to the client or printed on the PDF.
+  internalNotes       String?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   items               InvoiceItem[]

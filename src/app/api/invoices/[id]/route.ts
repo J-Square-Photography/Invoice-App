@@ -103,7 +103,7 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { status, dueDate, paymentMethod, notes, items, isGstApplied, gstRate, projectId, discounts } = body;
+    const { status, dueDate, paymentMethod, notes, internalNotes, items, isGstApplied, gstRate, projectId, discounts } = body;
 
     const existing = await prisma.invoice.findUnique({
       where: { id },
@@ -180,6 +180,7 @@ export async function PATCH(
     }
     if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
     if (notes !== undefined) updateData.notes = notes || null;
+    if (internalNotes !== undefined) updateData.internalNotes = internalNotes || null;
     if (changesProject) updateData.projectId = projectId;
 
     // Freeze the payment details once the invoice leaves DRAFT, so later changes in

@@ -64,6 +64,8 @@ export interface EditableInvoice {
   isGstApplied: boolean;
   gstRate: number;
   notes: string | null;
+  /** Admin-only remarks. Not present on quotations, which don't have this field. */
+  internalNotes?: string | null;
   paidAmount: number;
   project: { id: string };
   items: Array<{ description: string; quantity: number; unitPrice: number; amount?: number }>;
@@ -119,6 +121,7 @@ export function InvoiceFormDialog({
   const [isGstApplied, setIsGstApplied] = useState(true);
   const [gstRate, setGstRate] = useState(DEFAULT_GST_RATE);
   const [notes, setNotes] = useState('');
+  const [internalNotes, setInternalNotes] = useState('');
   const [items, setItems] = useState<LineItemInput[]>([{ ...DEFAULT_ITEM }]);
   const [hasStaticQr, setHasStaticQr] = useState(false);
   const [discounts, setDiscounts] = useState<DiscountRow[]>([]);
@@ -149,6 +152,7 @@ export function InvoiceFormDialog({
       setIsGstApplied(invoice.isGstApplied);
       setGstRate(invoice.gstRate || DEFAULT_GST_RATE);
       setNotes(invoice.notes || '');
+      setInternalNotes(invoice.internalNotes || '');
       setDiscounts(
         parseStoredDiscounts(invoice.discounts).map((d) => ({
           name: d.name ?? '',
@@ -172,6 +176,7 @@ export function InvoiceFormDialog({
       setIsGstApplied(true);
       setGstRate(DEFAULT_GST_RATE);
       setNotes('');
+      setInternalNotes('');
       setDiscounts([]);
       setItems([{ ...DEFAULT_ITEM }]);
     }
@@ -299,10 +304,12 @@ export function InvoiceFormDialog({
       const base = isQuote ? '/api/quotes' : '/api/invoices';
       // The two differ only in the date field (valid-until vs due) and the payment method
       const dateAndMethod = isQuote ? { validUntil: dueDate } : { dueDate, paymentMethod };
+      // Quotations don't have an internal-notes field
+      const internalNotesField = isQuote ? {} : { internalNotes };
       if (isEdit && invoice) {
         const body = lockAmounts
-          ? { ...dateAndMethod, notes }
-          : { projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, items, discounts: discountInputs };
+          ? { ...dateAndMethod, notes, ...internalNotesField }
+          : { projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, ...internalNotesField, items, discounts: discountInputs };
         res = await fetch(`${base}/${invoice.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -312,7 +319,7 @@ export function InvoiceFormDialog({
         res = await fetch(base, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, items, discounts: discountInputs }),
+          body: JSON.stringify({ projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, ...internalNotesField, items, discounts: discountInputs }),
         });
       }
 
@@ -825,7 +832,9 @@ export function InvoiceFormDialog({
 
           {/* Notes */}
           <div className="space-y-2">
-            <Label htmlFor="inv-notes">{isQuote ? 'Notes / Terms (Optional)' : 'Notes / Payment Terms (Optional)'}</Label>
+            <Label htmlFor="inv-notes">
+              {isQuote ? 'Notes / Terms (Optional)' : 'Notes / Payment Terms for Client (Optional)'}
+            </Label>
             <Textarea
               id="inv-notes"
               value={notes}
@@ -834,6 +843,20 @@ export function InvoiceFormDialog({
               className="h-20"
             />
           </div>
+
+          {!isQuote && (
+            <div className="space-y-2">
+              <Label htmlFor="inv-internal-notes">Internal Notes for Admins (Optional)</Label>
+              <Textarea
+                id="inv-internal-notes"
+                value={internalNotes}
+                onChange={(e) => setInternalNotes(e.target.value)}
+                placeholder="e.g. Converted from quotation QUO-2026-8K3F91."
+                className="h-16"
+              />
+              <p className="text-[11px] text-neutral-500">Never shown to the client or printed on the invoice PDF.</p>
+            </div>
+          )}
 
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>

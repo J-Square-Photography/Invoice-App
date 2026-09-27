@@ -41,7 +41,8 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       paymentMethod: 'PAYNOW_QR',
       isGstApplied: quote.isGstApplied,
       gstRate: quote.gstRate,
-      notes: [quote.notes, `Converted from quotation ${quote.quoteNumber}.`].filter(Boolean).join('\n'),
+      notes: quote.notes,
+      internalNotes: `Converted from quotation ${quote.quoteNumber}.`,
       items: quote.items.map((i) => ({ description: i.description, quantity: i.quantity, amount: Number(i.amount) })),
       discounts: parseStoredDiscounts(quote.discounts),
     });
