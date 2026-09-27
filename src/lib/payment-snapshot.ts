@@ -17,8 +17,6 @@ export interface PaymentSnapshot {
   /** Added later: older snapshots don't have it. */
   gstRegNo?: string;
   address?: string;
-  email?: string;
-  website?: string;
   /** Only stored when the invoice uses the static PayNow QR method. */
   staticQrDataUrl?: string | null;
   frozenAt: string;
@@ -43,8 +41,6 @@ export function makeSnapshot(live: CompanySettingsView, paymentMethod: string | 
     bankAccountName: live.bankAccountName,
     gstRegNo: live.gstRegNo,
     address: live.address,
-    email: live.email,
-    website: live.website,
     staticQrDataUrl: paymentMethod === 'PAYNOW_STATIC_QR' ? live.staticQrDataUrl : null,
     frozenAt: new Date().toISOString(),
   };
@@ -85,8 +81,9 @@ export function resolveCompany(
     // A business's GST number is a fact about the supplier, so older snapshots use the current one
     gstRegNo: snap.gstRegNo ?? live.gstRegNo,
     address: snap.address ?? live.address,
-    email: snap.email ?? live.email,
-    website: snap.website ?? live.website,
+    // Contact details, not payment-critical facts - always show the current Settings value, even on a frozen invoice
+    email: live.email,
+    website: live.website,
     staticQrDataUrl: snap.staticQrDataUrl ?? null,
     frozen: true,
   };

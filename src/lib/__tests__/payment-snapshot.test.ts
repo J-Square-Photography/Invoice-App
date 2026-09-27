@@ -37,6 +37,14 @@ describe('payment snapshot', () => {
     expect(result.bankAccountNumber).toBe('012-345678-9');
   });
 
+  it('a frozen invoice still shows the current email and website, not the ones set when it was issued', () => {
+    const old: CompanySettingsView = { ...live, email: 'old@example.com', website: 'www.old-example.com' };
+    const snapshot = makeSnapshot(old, 'PAYNOW_QR');
+    const result = resolveCompany({ paymentSnapshot: snapshot }, live);
+    expect(result.email).toBe('contact@example.com');
+    expect(result.website).toBe('www.example.com');
+  });
+
   it('only stores the static QR when the invoice uses the static QR method', () => {
     expect(makeSnapshot(live, 'PAYNOW_QR').staticQrDataUrl).toBeNull();
     expect(makeSnapshot(live, 'PAYNOW_STATIC_QR').staticQrDataUrl).toBe('data:image/png;base64,AAAA');

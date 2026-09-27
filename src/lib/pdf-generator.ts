@@ -298,9 +298,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   const stripH = 76 + nameExtraLines * 13 + contactExtraLines * 10 + clientAddressLines.length * 11;
   const x2 = M + c1;
   const x3 = M + c1 + c2;
-  edgeBox(M, stripTop - stripH, CW, stripH);
+  // Dividers first, box border last - otherwise the border's corners get lightened where a
+  // divider's flat end lands inside the border's own stroke width.
   vLine(x2, stripTop, stripTop - stripH, RULE, SOFT);
   vLine(x3, stripTop, stripTop - stripH, RULE, SOFT);
+  edgeBox(M, stripTop - stripH, CW, stripH);
 
   const label = (s: string, x: number, y: number) => text(s, x, y, 7.5, fontBold, ink);
   label(isQuote ? 'QUOTATION FOR' : 'INVOICE TO', M + 10, stripTop - 15);
