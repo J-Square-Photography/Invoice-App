@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isQuoteExpired, displayQuoteStatus, isQuoteStatus } from '../quote-status';
-import { nextInvoiceSequence, formatInvoiceNumber } from '../invoice-number';
+import { formatInvoiceNumber } from '../invoice-number';
 
 describe('quotation status', () => {
   const now = new Date(2026, 8, 22, 15, 0);
@@ -25,9 +25,7 @@ describe('quotation status', () => {
 });
 
 describe('quotation numbering', () => {
-  it('counts in its own QUO series, separately from invoices', () => {
-    expect(nextInvoiceSequence(['JSQ-2026-0017'], 2026, 'QUO')).toBe(1);
-    expect(nextInvoiceSequence(['QUO-2026-0001', 'QUO-2026-0002', 'JSQ-2026-0017'], 2026, 'QUO')).toBe(3);
-    expect(formatInvoiceNumber(2026, 3, 'QUO')).toBe('QUO-2026-0003');
+  it('formats in its own QUO series, separately from invoices', () => {
+    expect(formatInvoiceNumber(2026, '8K3F91', 'QUO')).toBe('QUO-2026-8K3F91');
   });
 });
