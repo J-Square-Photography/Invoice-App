@@ -7,6 +7,7 @@ import { defaultPaymentConfig, usesSamplePaymentDetails, SAMPLE_DETAILS_MESSAGE 
 import { getCompanySettings, toPublicPaymentConfig } from '@/lib/company-settings';
 import { makeSnapshot, parseSnapshot, resolveCompany, snapshotForDb } from '@/lib/payment-snapshot';
 import { MANUAL_STATUSES, deriveStatus, toCents } from '@/lib/invoice-status';
+import { appendInternalNote } from '@/lib/internal-notes';
 import { generatePayNowPayload, generatePayNowQRDataURL } from '@/lib/sgqr';
 import {
   calculateInvoiceTotals,
@@ -182,6 +183,15 @@ export async function PATCH(
     if (notes !== undefined) updateData.notes = notes || null;
     if (internalNotes !== undefined) updateData.internalNotes = internalNotes || null;
     if (changesProject) updateData.projectId = projectId;
+
+    // A quick, human-readable log of when this happened, on top of whatever notes were just saved
+    const voiding = status === 'VOID' && existing.status !== 'VOID';
+    const unvoiding = existing.status === 'VOID' && status !== undefined && status !== 'VOID';
+    if (voiding || unvoiding) {
+      const base = internalNotes !== undefined ? internalNotes || null : existing.internalNotes;
+      const who = user.name || user.email;
+      updateData.internalNotes = appendInternalNote(base, voiding ? `Voided by ${who}.` : `Un-voided by ${who}.`);
+    }
 
     // Freeze the payment details once the invoice leaves DRAFT, so later changes in
     // Settings can't alter what the client was told to pay to.

@@ -29,6 +29,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       isGstApplied: source.isGstApplied,
       gstRate: source.gstRate,
       notes: source.notes,
+      internalNotes: `Duplicated from invoice ${source.invoiceNumber}.`,
       items: source.items.map((i) => ({
         description: i.description,
         quantity: i.quantity,

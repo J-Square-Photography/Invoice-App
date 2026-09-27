@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { appendInternalNote } from '@/lib/internal-notes';
 
 /**
  * Reverts a PAID invoice back to an open state: clears its payment ledger,
@@ -33,6 +34,7 @@ export async function POST(
     }
 
     const clearedCount = existing.paymentLogs.length;
+    const totalReverted = existing.paymentLogs.reduce((sum, p) => sum + Number(p.amountPaid), 0);
 
     const invoice = await prisma.$transaction(async (tx) => {
       // Keep a record of what is being removed and by whom, so the ledger is never silently lost
@@ -59,6 +61,10 @@ export async function POST(
           paidAmount: 0,
           balanceDue: existing.totalAmount,
           status: 'SENT',
+          internalNotes: appendInternalNote(
+            existing.internalNotes,
+            `Reverted ${clearedCount} payment${clearedCount === 1 ? '' : 's'} totalling SGD $${totalReverted.toFixed(2)}, by ${user.name || user.email}.`
+          ),
         },
         include: {
           project: { include: { client: true } },
