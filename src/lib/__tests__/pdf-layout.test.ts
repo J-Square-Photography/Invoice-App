@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
-import { inflateSync } from 'zlib';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { generateInvoicePDF, type InvoicePDFData } from '../pdf-generator';
 import { calculateInvoiceTotals } from '../invoice-calculations';
 
@@ -52,25 +52,16 @@ function invoice({ items = [{ description: 'Event Photography (Novice, 3 hours)'
     items: totals.items,
   };
 }
-/** All text drawn in a generated PDF (the standard fonts store it as hex strings in compressed streams). */
-function pdfText(bytes: Uint8Array): string {
-  const raw = Buffer.from(bytes);
-  const s = raw.toString('latin1');
-  const out: string[] = [];
-  let i = 0;
-  while ((i = s.indexOf('stream', i)) !== -1) {
-    const a = s.indexOf('\n', i) + 1;
-    const b = s.indexOf('endstream', a);
-    if (a < 1 || b < 0) break;
-    try {
-      const content = inflateSync(raw.subarray(a, b)).toString('latin1');
-      for (const m of content.matchAll(/<([0-9A-Fa-f]+)> Tj/g)) out.push(Buffer.from(m[1], 'hex').toString('latin1'));
-    } catch {
-      // not a content stream
-    }
-    i = b + 9;
+/** All text drawn in a generated PDF (Montserrat is embedded as a subset with Identity-H encoding, so hex strings in the content stream are glyph IDs, not characters - pdfjs-dist reads them back via the font's ToUnicode CMap instead). */
+async function pdfText(bytes: Uint8Array): Promise<string> {
+  // pdfjs-dist transfers the buffer it's given, so pass a copy - the caller often reuses `bytes` afterwards (e.g. for pageCount).
+  const doc = await getDocument({ data: bytes.slice(), useSystemFonts: true, isEvalSupported: false }).promise;
+  let out = '';
+  for (let i = 1; i <= doc.numPages; i++) {
+    const content = await (await doc.getPage(i)).getTextContent();
+    out += content.items.map((it) => ('str' in it ? it.str : '')).join(' ') + '\n';
   }
-  return out.join('\n');
+  return out;
 }
 
 const pageCount = async (bytes: Uint8Array) => (await PDFDocument.load(bytes)).getPageCount();
@@ -127,13 +118,13 @@ describe('invoice PDF layout', () => {
   });
 
   it('a GST invoice is titled "Tax Invoice" and shows the GST registration number', async () => {
-    const text = pdfText(await generateInvoicePDF(invoice({ overrides: { company: { ...COMPANY, gstRegNo: 'M90376150R' } } })));
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { company: { ...COMPANY, gstRegNo: 'M90376150R' } } })));
     expect(text).toContain('Tax Invoice');
     expect(text).toContain('GST Reg No: M90376150R');
   });
 
   it('with no GST number set, the line is simply left out', async () => {
-    const text = pdfText(await generateInvoicePDF(invoice({ overrides: { company: { ...COMPANY, gstRegNo: '' } } })));
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { company: { ...COMPANY, gstRegNo: '' } } })));
     expect(text).toContain('Tax Invoice');
     expect(text).not.toContain('GST Reg No');
   });
@@ -147,14 +138,14 @@ describe('invoice PDF layout', () => {
         },
       })
     );
-    const text = pdfText(bytes);
+    const text = await pdfText(bytes);
     expect(text).toContain('123 Example Road');
     expect(text).toContain('9 Client Street');
     expect(await pageCount(bytes)).toBe(1);
   });
 
   it('with no addresses, the header falls back to plain Singapore', async () => {
-    const text = pdfText(await generateInvoicePDF(invoice({ overrides: { company: { ...COMPANY, address: '' } } })));
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { company: { ...COMPANY, address: '' } } })));
     expect(text).toContain('Singapore');
   });
 
@@ -162,7 +153,7 @@ describe('invoice PDF layout', () => {
     const bytes = await generateInvoicePDF(
       invoice({ overrides: { documentType: 'QUOTE', invoiceNumber: 'QUO-2026-0001', status: 'DRAFT', company: { ...COMPANY, gstRegNo: 'M90376150R' } } })
     );
-    const text = pdfText(bytes);
+    const text = await pdfText(bytes);
     expect(text).toContain('Quotation');
     expect(text).toContain('QUO-2026-0001');
     expect(text).toContain('HOW TO ACCEPT');
@@ -174,7 +165,7 @@ describe('invoice PDF layout', () => {
   });
 
   it('a no-charge line reads as Included instead of $0.00', async () => {
-    const text = pdfText(await generateInvoicePDF(invoice({ items: [{ description: 'Photography', amount: 500 }, { description: 'Culling and editing', amount: 0 }] })));
+    const text = await pdfText(await generateInvoicePDF(invoice({ items: [{ description: 'Photography', amount: 500 }, { description: 'Culling and editing', amount: 0 }] })));
     expect(text).toContain('Included');
   });
 
@@ -192,7 +183,7 @@ describe('invoice PDF layout', () => {
     // Wrapped text lands in separate Tj chunks (one per drawn line), so it comes back with a
     // newline wherever a line broke - including, for an unbreakable string like an email with no
     // spaces of its own, mid-word. Strip whitespace entirely before checking it's all still there.
-    const squashed = pdfText(bytes).replace(/\s+/g, '');
+    const squashed = (await pdfText(bytes)).replace(/\s+/g, '');
     expect(squashed).toContain(longName.replace(/\s+/g, ''));
     expect(squashed).toContain(longContact.replace(/\s+/g, ''));
     expect(squashed).toContain(longEmail.replace(/\s+/g, ''));
@@ -200,7 +191,7 @@ describe('invoice PDF layout', () => {
   });
 
   it('an invoice that does not charge GST is a plain Invoice', async () => {
-    const text = pdfText(await generateInvoicePDF(invoice({ overrides: { isGstApplied: false, gstAmount: 0, company: { ...COMPANY, gstRegNo: 'M90376150R' } } })));
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { isGstApplied: false, gstAmount: 0, company: { ...COMPANY, gstRegNo: 'M90376150R' } } })));
     expect(text).not.toContain('Tax Invoice');
     expect(text).toContain('Invoice');
   });

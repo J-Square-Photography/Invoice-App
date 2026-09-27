@@ -1,8 +1,25 @@
-﻿import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
+﻿import { PDFDocument, rgb, PageSizes } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { defaultPaymentConfig, type CompanyPaymentConfig } from './payment-config';
 import { generatePayNowPayload, generatePayNowQRDataURL } from './sgqr';
 import { discountName, discountTerms } from './invoice-calculations';
 import { loadUnicodeFonts, splitRuns } from './pdf-unicode';
+
+/** Brand typeface (J Square Brand Guide: Montserrat). Read once per warm serverless instance. */
+const FONT_DIR = join(process.cwd(), 'src', 'lib', 'fonts');
+let montserrat: { regular: Uint8Array; bold: Uint8Array; italic: Uint8Array } | null = null;
+function loadMontserrat() {
+  if (!montserrat) {
+    montserrat = {
+      regular: new Uint8Array(readFileSync(join(FONT_DIR, 'Montserrat-Regular.ttf'))),
+      bold: new Uint8Array(readFileSync(join(FONT_DIR, 'Montserrat-Bold.ttf'))),
+      italic: new Uint8Array(readFileSync(join(FONT_DIR, 'Montserrat-Italic.ttf'))),
+    };
+  }
+  return montserrat;
+}
 
 export interface InvoicePDFData {
   /** Quotations reuse this layout: no payment details or QR, and dueDate is the valid-until date. */
@@ -49,9 +66,13 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   const cfg = data.company ?? defaultPaymentConfig;
   const isQuote = data.documentType === 'QUOTE';
   const pdfDoc = await PDFDocument.create();
-  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const fontOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+  pdfDoc.registerFontkit(fontkit);
+  const mont = loadMontserrat();
+  // Subsetting reads and mutates decoded font state, so each document gets its own copy of the bytes
+  // rather than sharing the cached Uint8Array across every PDF generated in this process.
+  const fontRegular = await pdfDoc.embedFont(mont.regular.slice(), { subset: true });
+  const fontBold = await pdfDoc.embedFont(mont.bold.slice(), { subset: true });
+  const fontOblique = await pdfDoc.embedFont(mont.italic.slice(), { subset: true });
   type Font = typeof fontRegular;
   type Colour = ReturnType<typeof rgb>;
 
