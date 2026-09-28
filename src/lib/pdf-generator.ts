@@ -235,7 +235,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     addrLines[ADDR_MAX_LINES - 1] = fit(`${addrLines[ADDR_MAX_LINES - 1]} ${addrWrapped.slice(ADDR_MAX_LINES).join(' ')}`, 8.5, fontRegular, 210);
   }
   const companyLines = [
-    `UEN: ${cfg.uen}`,
     ...(cfg.gstRegNo ? [`GST Reg No: ${cfg.gstRegNo}`] : []),
     ...(cfg.email ? [cfg.email] : []),
     ...(cfg.website ? [cfg.website] : []),

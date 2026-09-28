@@ -240,4 +240,9 @@ describe('invoice PDF layout', () => {
     const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { documentType: 'QUOTE', invoiceNumber: 'QUO-2026-0001', status: 'DECLINED' } })));
     expect(text).toContain('DECLINED');
   });
+
+  it('does not render company UEN in the top-right header block', async () => {
+    const quoteText = await pdfText(await generateInvoicePDF(invoice({ overrides: { documentType: 'QUOTE', company: { ...COMPANY, uen: '202012345M' } } })));
+    expect(quoteText).not.toContain('UEN: 202012345M');
+  });
 });
