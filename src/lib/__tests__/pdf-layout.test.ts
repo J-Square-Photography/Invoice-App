@@ -223,4 +223,21 @@ describe('invoice PDF layout', () => {
     const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { status: 'VOID' } })));
     expect(text).toContain('VOID');
   });
+
+  it('a draft or sent quotation does not render any status badge', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { documentType: 'QUOTE', invoiceNumber: 'QUO-2026-0001', status: 'DRAFT' } })));
+    expect(text).not.toContain('STATUS: DRAFT');
+    expect(text).not.toContain('DRAFT');
+    expect(text).not.toContain('STATUS:');
+  });
+
+  it('an accepted quotation renders the ACCEPTED status badge', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { documentType: 'QUOTE', invoiceNumber: 'QUO-2026-0001', status: 'ACCEPTED' } })));
+    expect(text).toContain('ACCEPTED');
+  });
+
+  it('a declined quotation renders the DECLINED status badge', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { documentType: 'QUOTE', invoiceNumber: 'QUO-2026-0001', status: 'DECLINED' } })));
+    expect(text).toContain('DECLINED');
+  });
 });

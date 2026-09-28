@@ -254,7 +254,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     ? data.status === 'ACCEPTED' ? green : data.status === 'DECLINED' ? faint : STRONG
     : data.status === 'PAID' ? green : data.status === 'PARTIAL' ? brass : STRONG;
   const statusLabel = isQuote
-    ? data.status === 'ACCEPTED' || data.status === 'DECLINED' ? `${data.status}` : `VALID UNTIL ${fmtDate(data.dueDate).toUpperCase()}`
+    ? data.status === 'ACCEPTED' || data.status === 'DECLINED' ? `${data.status}` : null
     : data.status === 'PAID' || data.status === 'PARTIAL' || data.status === 'VOID'
       ? `${data.status}`
       : null;
