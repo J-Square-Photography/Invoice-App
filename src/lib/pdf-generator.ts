@@ -1,4 +1,4 @@
-﻿import { PDFDocument, rgb, PageSizes } from 'pdf-lib';
+import { PDFDocument, rgb, PageSizes } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -255,10 +255,14 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     : data.status === 'PAID' ? green : data.status === 'PARTIAL' ? brass : STRONG;
   const statusLabel = isQuote
     ? data.status === 'ACCEPTED' || data.status === 'DECLINED' ? `${data.status}` : `VALID UNTIL ${fmtDate(data.dueDate).toUpperCase()}`
-    : `STATUS: ${data.status}`;
-  const badgeW = measure(statusLabel, 8, fontBold) + 18;
-  fillBox(RIGHT - badgeW, H - 160, badgeW, 16, statusColor);
-  textRight(statusLabel, RIGHT - 9, H - 155, 8, fontBold, white);
+    : data.status === 'PAID' || data.status === 'PARTIAL' || data.status === 'VOID'
+      ? `${data.status}`
+      : null;
+  if (statusLabel) {
+    const badgeW = measure(statusLabel, 8, fontBold) + 18;
+    fillBox(RIGHT - badgeW, H - 160, badgeW, 16, statusColor);
+    textRight(statusLabel, RIGHT - 9, H - 155, 8, fontBold, white);
+  }
 
   hLine(M, RIGHT, H - 174, RULE, SOFT);
 

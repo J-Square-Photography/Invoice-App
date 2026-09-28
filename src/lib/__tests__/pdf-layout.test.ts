@@ -195,4 +195,32 @@ describe('invoice PDF layout', () => {
     expect(text).not.toContain('Tax Invoice');
     expect(text).toContain('Invoice');
   });
+
+  it('a draft invoice does not render a DRAFT status badge on client PDF', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { status: 'DRAFT' } })));
+    expect(text).not.toContain('STATUS: DRAFT');
+    expect(text).not.toContain('DRAFT');
+    expect(text).not.toContain('STATUS:');
+  });
+
+  it('a sent invoice does not render a SENT status badge on client PDF', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { status: 'SENT' } })));
+    expect(text).not.toContain('STATUS: SENT');
+    expect(text).not.toContain('STATUS:');
+  });
+
+  it('a paid invoice renders the PAID status badge', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { status: 'PAID' } })));
+    expect(text).toContain('PAID');
+  });
+
+  it('a partially paid invoice renders the PARTIAL status badge', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { status: 'PARTIAL' } })));
+    expect(text).toContain('PARTIAL');
+  });
+
+  it('a void invoice renders the VOID status badge', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { status: 'VOID' } })));
+    expect(text).toContain('VOID');
+  });
 });
