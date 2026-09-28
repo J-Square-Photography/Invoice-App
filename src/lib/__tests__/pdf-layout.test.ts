@@ -245,4 +245,9 @@ describe('invoice PDF layout', () => {
     const quoteText = await pdfText(await generateInvoicePDF(invoice({ overrides: { documentType: 'QUOTE', company: { ...COMPANY, uen: '202012345M' } } })));
     expect(quoteText).not.toContain('UEN: 202012345M');
   });
+
+  it('does not render UNIT PRICE column in the items table', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice()));
+    expect(text).not.toContain('UNIT PRICE');
+  });
 });

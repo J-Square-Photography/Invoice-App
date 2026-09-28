@@ -339,9 +339,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   // ============ 4. ITEMS TABLE ============
   const HEADER_H = 22;
   const ROW_MIN = 24;
-  const qtyX = M + 285;
-  const unitX = qtyX + 50;
-  const amtX = unitX + 80;
+  const amtX = RIGHT - 100;
+  const qtyX = amtX - 50;
   const descW = qtyX - M - 20;
   const cellPad = 8;
 
@@ -351,14 +350,13 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   const drawTableHeader = () => {
     fillBox(M, y - HEADER_H, CW, HEADER_H, TINT);
     text('DESCRIPTION', M + cellPad, y - 15, 8, fontBold, ink);
-    textCentre('QTY', (qtyX + unitX) / 2, y - 15, 8, fontBold, ink);
-    textRight('UNIT PRICE', amtX - cellPad, y - 15, 8, fontBold, ink);
+    textCentre('QTY', (qtyX + amtX) / 2, y - 15, 8, fontBold, ink);
     textRight('AMOUNT (SGD)', RIGHT - cellPad, y - 15, 8, fontBold, ink);
     y -= HEADER_H;
   };
   // Bold outer edge and soft column dividers around the part of the table drawn on this page
   const closeTableSegment = () => {
-    for (const x of [qtyX, unitX, amtX]) vLine(x, segTop, y, RULE, SOFT);
+    for (const x of [qtyX, amtX]) vLine(x, segTop, y, RULE, SOFT);
     edgeBox(M, y, CW, segTop - y);
     // the heavier line under the heading row
     hLine(M, RIGHT, segTop - HEADER_H, EDGE, STRONG);
@@ -378,13 +376,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     }
     if (item) {
       lines.forEach((l, i) => text(l, M + cellPad, y - 15 - i * 11.5, 9, fontRegular, ink));
-      textCentre(String(item.quantity), (qtyX + unitX) / 2, y - 15, 9, fontRegular, slate);
+      textCentre(String(item.quantity), (qtyX + amtX) / 2, y - 15, 9, fontRegular, slate);
       if (item.amount === 0) {
         // A no-charge line (e.g. "Culling and editing") reads as included rather than $0.00
-        textRight('-', amtX - cellPad, y - 15, 9, fontRegular, faint);
         textRight('Included', RIGHT - cellPad, y - 15, 9, fontRegular, slate);
       } else {
-        textRight(money(item.unitPrice), amtX - cellPad, y - 15, 9, fontRegular, slate);
         textRight(money(item.amount), RIGHT - cellPad, y - 15, 9, fontBold, ink);
       }
     }
