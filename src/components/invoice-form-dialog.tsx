@@ -28,7 +28,7 @@ import {
 import { PHOTOBOOTH_PACKAGES } from '@/lib/photobooth-presets';
 import { SERVICE_CATALOGUE, findServiceItem } from '@/lib/service-presets';
 import { tagLabel } from '@/lib/service-tags';
-import { singaporeDateParts } from '@/lib/time';
+import { singaporeDateParts, defaultInvoiceDueDate, addOneMonthSingapore } from '@/lib/time';
 import { logCancelledAction } from '@/lib/log-cancel';
 
 interface DiscountRow {
@@ -49,6 +49,7 @@ interface ProjectOption {
   id: string;
   title: string;
   serviceTags?: string[];
+  shootDate?: string | null;
   client: {
     companyName: string;
     contactName: string;
@@ -80,12 +81,6 @@ export interface EditableInvoice {
 const DEFAULT_GST_RATE = 9;
 const DEFAULT_ITEM: LineItemInput = { description: 'Photography / Videography Services', quantity: 1, amount: 0 };
 
-// N days from today in Singapore (the browser's UTC date would be a day behind early in the morning)
-const defaultDueDate = (days = 14) => {
-  const { year, month, day } = singaporeDateParts();
-  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().split('T')[0];
-};
-
 export function InvoiceFormDialog({
   open,
   onOpenChange,
@@ -108,7 +103,6 @@ export function InvoiceFormDialog({
   const isEdit = !!invoice;
   const isQuote = kind === 'quote';
   const noun = isQuote ? 'quotation' : 'invoice';
-  const validDays = 30;
 
   const [saving, setSaving] = useState(false);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -117,7 +111,7 @@ export function InvoiceFormDialog({
   const [selectedProjectId, setSelectedProjectId] = useState('');
   // Presets are limited to the project's service tags unless this is switched on
   const [showAllServices, setShowAllServices] = useState(false);
-  const [dueDate, setDueDate] = useState(() => defaultDueDate(kind === 'quote' ? 30 : 14));
+  const [dueDate, setDueDate] = useState(() => (kind === 'quote' ? addOneMonthSingapore() : defaultInvoiceDueDate()));
   const [paymentMethod, setPaymentMethod] = useState('PAYNOW_QR');
   const [isGstApplied, setIsGstApplied] = useState(true);
   const [gstRate, setGstRate] = useState(DEFAULT_GST_RATE);
@@ -172,7 +166,7 @@ export function InvoiceFormDialog({
       );
     } else {
       setSelectedProjectId(defaultProjectId ?? '');
-      setDueDate(defaultDueDate(isQuote ? validDays : 14));
+      setDueDate(isQuote ? addOneMonthSingapore() : defaultInvoiceDueDate());
       setPaymentMethod('PAYNOW_QR');
       setIsGstApplied(true);
       setGstRate(DEFAULT_GST_RATE);
@@ -201,7 +195,14 @@ export function InvoiceFormDialog({
           // A new document starts on the project it was opened from, or with none chosen: guessing the
           // newest project made it easy to invoice the wrong client without noticing
           if (!invoice) {
-            setSelectedProjectId(defaultProjectId && list.some((p) => p.id === defaultProjectId) ? defaultProjectId : '');
+            const chosenId = defaultProjectId && list.some((p) => p.id === defaultProjectId) ? defaultProjectId : '';
+            setSelectedProjectId(chosenId);
+            if (chosenId && !isQuote) {
+              const proj = list.find((p) => p.id === chosenId);
+              if (proj?.shootDate) {
+                setDueDate(defaultInvoiceDueDate(proj.shootDate));
+              }
+            }
           }
         }
       } catch {
@@ -402,7 +403,14 @@ export function InvoiceFormDialog({
               <Select
                 id="inv-projectId"
                 value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setSelectedProjectId(nextId);
+                  if (!isEdit && !isQuote) {
+                    const proj = projects.find((p) => p.id === nextId);
+                    setDueDate(defaultInvoiceDueDate(proj?.shootDate));
+                  }
+                }}
                 disabled={lockAmounts}
                 required
               >

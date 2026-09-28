@@ -3,11 +3,12 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { parseStoredDiscounts } from '@/lib/invoice-calculations';
 import { createDraftInvoice } from '@/lib/create-invoice';
+import { defaultInvoiceDueDateObject } from '@/lib/time';
 import { logActivity } from '@/lib/activity-log';
 
 /**
  * One-click "convert to invoice": creates a DRAFT invoice with the same line items,
- * discounts, GST and notes (due in 14 days), marks the quotation Accepted and links the two.
+ * discounts, GST and notes (due 1 month after event or 1 month from today), marks the quotation Accepted and links the two.
  * A quotation can only be converted once.
  */
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -19,7 +20,11 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   try {
     const quote = await prisma.quote.findUnique({
       where: { id },
-      include: { items: true, invoice: { select: { id: true, invoiceNumber: true } } },
+      include: {
+        items: true,
+        invoice: { select: { id: true, invoiceNumber: true } },
+        project: { select: { shootDate: true } },
+      },
     });
     if (!quote) return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
 
@@ -33,8 +38,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'A declined quotation cannot be converted. Mark it Sent or Draft first.' }, { status: 409 });
     }
 
-    const due = new Date();
-    due.setDate(due.getDate() + 14);
+    const due = defaultInvoiceDueDateObject(quote.project?.shootDate);
 
     const invoice = await createDraftInvoice({
       projectId: quote.projectId,
