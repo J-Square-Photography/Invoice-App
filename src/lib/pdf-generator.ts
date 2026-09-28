@@ -477,7 +477,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   fillBox(M, ly - 22, LW, 22, TINT);
   hLine(M, M + LW, ly - 22, RULE, SOFT);
   edgeBox(M, ly - PAY_H, LW, PAY_H);
-  text(isQuote ? 'HOW TO ACCEPT' : 'PAYMENT INSTRUCTIONS', M + 12, ly - 15, 9.5, fontBold, ink);
+  text(isQuote ? 'HOW TO ACCEPT' : 'PAYMENT OPTIONS', M + 12, ly - 15, 9.5, fontBold, ink);
   const px = M + 12;
   const pw = LW - 24;
   let py = ly - 38;
@@ -503,7 +503,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   py -= 16;
   text('3. Scan with any Singapore bank app', px, py, 8.5, fontBold, ink);
   py -= 12;
-  text('DBS PayLah!, OCBC, UOB, GrabPay', px + 10, py, 8, fontRegular, slate);
+  text('DBS PayLah!, OCBC, UOB, GrabPay, etc.', px + 10, py, 8, fontRegular, slate);
   py -= 11;
   text(`Ref: ${data.invoiceNumber}`, px + 10, py, 8, fontBold, ink);
   }

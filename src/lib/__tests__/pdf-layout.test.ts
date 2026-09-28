@@ -160,6 +160,7 @@ describe('invoice PDF layout', () => {
     expect(text).toContain('QUOTED TOTAL');
     expect(text).not.toContain('Tax Invoice');
     expect(text).not.toContain('PAYMENT INSTRUCTIONS');
+    expect(text).not.toContain('PAYMENT OPTIONS');
     expect(text).not.toContain('BALANCE DUE');
     expect(await pageCount(bytes)).toBe(1);
   });
@@ -249,5 +250,11 @@ describe('invoice PDF layout', () => {
   it('does not render UNIT PRICE column in the items table', async () => {
     const text = await pdfText(await generateInvoicePDF(invoice()));
     expect(text).not.toContain('UNIT PRICE');
+  });
+
+  it('renders PAYMENT OPTIONS and DBS PayLah!, OCBC, UOB, GrabPay, etc. on invoice', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice()));
+    expect(text).toContain('PAYMENT OPTIONS');
+    expect(text).toContain('DBS PayLah!, OCBC, UOB, GrabPay, etc.');
   });
 });
