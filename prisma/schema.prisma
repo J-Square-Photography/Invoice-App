@@ -213,7 +213,7 @@ model Quote {
   id             String      @id @default(uuid())
   projectId      String
   project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  quoteNumber    String      @unique // QUO-YYYY-XXXX
+  quoteNumber    String      @unique // QUO-YYYY-<month code><counter>, e.g. QUO-2026-8K3F911
   subtotal       Decimal     @default(0) @db.Decimal(12, 2)
   discountAmount Decimal     @default(0) @db.Decimal(12, 2)
   discounts      Json?
@@ -441,4 +441,15 @@ model ActivityLog {
 
   @@index([createdAt])
   @@map("activity_logs")
+}
+
+// One row per calendar month (Singapore time): the random code shared by that month's invoice
+// and quotation numbers, plus each series' running counter (see src/lib/invoice-number.ts).
+model NumberSeries {
+  id         String @id // YYYY-MM, e.g. "2026-09"
+  code       String
+  invoiceSeq Int    @default(0)
+  quoteSeq   Int    @default(0)
+
+  @@map("number_series")
 }

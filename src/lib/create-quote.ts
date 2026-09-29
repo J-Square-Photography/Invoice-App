@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { calculateInvoiceTotals, type RawInvoiceItemInput, type RawDiscountInput } from '@/lib/invoice-calculations';
-import { formatInvoiceNumber, randomInvoiceCode, isInvoiceNumberClash } from '@/lib/invoice-number';
+import { nextDocumentNumber, isInvoiceNumberClash } from '@/lib/invoice-number';
 
 export interface NewQuoteInput {
   projectId: string;
@@ -14,9 +14,9 @@ export interface NewQuoteInput {
   status?: 'DRAFT' | 'SENT';
 }
 
-/** Quotation numbers look like QUO-2026-8K3F91, in their own series from invoices. */
-export async function generateQuoteNumber(year = new Date().getFullYear()): Promise<string> {
-  return formatInvoiceNumber(year, randomInvoiceCode(), 'QUO');
+/** Quotation numbers look like QUO-2026-8K3F911: the month's shared code, with their own counter. */
+export async function generateQuoteNumber(date = new Date()): Promise<string> {
+  return nextDocumentNumber('QUO', date);
 }
 
 /** Creates a quotation with its totals worked out by the same calculation invoices use. */

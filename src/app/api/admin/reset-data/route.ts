@@ -72,6 +72,8 @@ export async function POST(request: NextRequest) {
       const quotes = (await tx.quote.deleteMany()).count;
       await tx.invoiceItem.deleteMany();
       const invoices = (await tx.invoice.deleteMany()).count;
+      // A fresh start restarts numbering too
+      await tx.numberSeries.deleteMany();
 
       let staff = 0;
       let timesheets = 0;

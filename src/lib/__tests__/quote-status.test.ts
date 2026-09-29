@@ -26,6 +26,6 @@ describe('quotation status', () => {
 
 describe('quotation numbering', () => {
   it('formats in its own QUO series, separately from invoices', () => {
-    expect(formatInvoiceNumber(2026, '8K3F91', 'QUO')).toBe('QUO-2026-8K3F91');
+    expect(formatInvoiceNumber(2026, '8K3F91', 1, 'QUO')).toBe('QUO-2026-8K3F911');
   });
 });
