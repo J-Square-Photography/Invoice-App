@@ -213,7 +213,7 @@ model Quote {
   id             String      @id @default(uuid())
   projectId      String
   project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  quoteNumber    String      @unique // QUO-YYYY-<month code><counter>, e.g. QUO-2026-8K3F911
+  quoteNumber    String      @unique // QUO-YYYY-<month code><counter>, e.g. QUO-2026-4821371
   subtotal       Decimal     @default(0) @db.Decimal(12, 2)
   discountAmount Decimal     @default(0) @db.Decimal(12, 2)
   discounts      Json?

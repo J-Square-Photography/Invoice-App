@@ -1,23 +1,17 @@
-import { randomBytes } from 'crypto';
+import { randomInt } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
 /**
- * Document numbers look like JSQ-2026-8K3F911: series, year, then a random 6-character code
+ * Document numbers look like JSQ-2026-4821371: series, year, then a random 6-digit code
  * followed directly by a running counter (1, 2, ... 10, 11 - no padding). Every calendar month
  * (Singapore time) gets a fresh random code, shared by that month's invoices (JSQ) and
  * quotations (QUO), and each series' counter starts again at 1. The code is created by the first
  * document of the month, so no scheduled job is needed to roll it over.
  */
-const CODE_CHARS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'; // no 0/O, 1/I/L - avoids visual confusion
-const CODE_LENGTH = 6;
-
 export type NumberSeriesPrefix = 'JSQ' | 'QUO';
 
 export function randomInvoiceCode(): string {
-  const bytes = randomBytes(CODE_LENGTH);
-  let code = '';
-  for (let i = 0; i < CODE_LENGTH; i++) code += CODE_CHARS[bytes[i] % CODE_CHARS.length];
-  return code;
+  return String(randomInt(0, 1_000_000)).padStart(6, '0');
 }
 
 export const formatInvoiceNumber = (year: number, code: string, seq: number, series: NumberSeriesPrefix = 'JSQ') =>

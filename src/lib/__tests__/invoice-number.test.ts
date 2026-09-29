@@ -26,18 +26,18 @@ import { randomInvoiceCode, formatInvoiceNumber, singaporeYearMonth, nextDocumen
 describe('invoice numbering', () => {
   beforeEach(() => rows.clear());
 
-  it('generates a 6-character code from the non-confusable alphabet', () => {
+  it('generates a 6-digit code', () => {
     for (let i = 0; i < 50; i++) {
       const code = randomInvoiceCode();
       expect(code).toHaveLength(6);
-      expect(code).toMatch(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]+$/);
+      expect(code).toMatch(/^[0-9]+$/);
     }
   });
 
   it('formats as series-year-code followed directly by the counter, unpadded', () => {
-    expect(formatInvoiceNumber(2026, '8K3F91', 1)).toBe('JSQ-2026-8K3F911');
-    expect(formatInvoiceNumber(2026, '8K3F91', 10)).toBe('JSQ-2026-8K3F9110');
-    expect(formatInvoiceNumber(2026, '8K3F91', 2, 'QUO')).toBe('QUO-2026-8K3F912');
+    expect(formatInvoiceNumber(2026, '482137', 1)).toBe('JSQ-2026-4821371');
+    expect(formatInvoiceNumber(2026, '482137', 10)).toBe('JSQ-2026-48213710');
+    expect(formatInvoiceNumber(2026, '482137', 2, 'QUO')).toBe('QUO-2026-4821372');
   });
 
   it('uses the Singapore month, not UTC', () => {
@@ -68,7 +68,7 @@ describe('invoice numbering', () => {
     await nextDocumentNumber('JSQ', new Date('2026-09-10T04:00:00Z'));
     await nextDocumentNumber('JSQ', new Date('2026-09-11T04:00:00Z'));
     const oct = await nextDocumentNumber('JSQ', new Date('2026-10-01T04:00:00Z'));
-    expect(oct).toMatch(/^JSQ-2026-[23456789A-Z]{6}1$/);
+    expect(oct).toMatch(/^JSQ-2026-[0-9]{6}1$/);
     expect(rows.get('2026-10')?.invoiceSeq).toBe(1);
     expect(rows.size).toBe(2);
   });

@@ -238,16 +238,22 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   fillBox(M, H - 48, CW, 8, brass);
 
   // The studio's wordmark; the name as text only if the logo file is missing
+  const tagline = 'PHOTOGRAPHY  \u00B7  VIDEOGRAPHY  \u00B7  PHOTOBOOTH';
+  const taglineW = measure(tagline, 7.5, fontRegular);
   const logo = loadLogo();
   if (logo) {
     const logoImage = await pdfDoc.embedPng(logo);
     const LOGO_H = 42;
-    page.drawImage(logoImage, { x: M, y: H - 98, width: (logoImage.width / logoImage.height) * LOGO_H, height: LOGO_H });
+    const logoW = (logoImage.width / logoImage.height) * LOGO_H;
+    // Logo and tagline share a centre line; the wider of the two sits on the left margin
+    const blockW = Math.max(logoW, taglineW);
+    page.drawImage(logoImage, { x: M + (blockW - logoW) / 2, y: H - 98, width: logoW, height: LOGO_H });
+    text(tagline, M + (blockW - taglineW) / 2, H - 110, 7.5, fontRegular, faint);
   } else {
     const studioName = fitSize(cfg.companyName.toUpperCase(), 20, fontBold, CW - 230, 11);
     text(studioName.text, M, H - 82, studioName.size, fontBold, ink);
+    text(tagline, M, H - 96, 7.5, fontRegular, faint);
   }
-  text('PHOTOGRAPHY  \u00B7  VIDEOGRAPHY  \u00B7  PHOTOBOOTH', M, H - 110, 7.5, fontRegular, faint);
 
   // Company block, right-aligned. The GST registration number appears once one is set in Settings.
   const ADDR_MAX_LINES = 3;
@@ -413,7 +419,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   // ============ 5. NOTES + PAYMENT (left) and TOTALS + QR (right) ============
   const discounts = data.discounts ?? [];
-  type TotalsRow = { label: string; value: string; kind: 'normal' | 'discount' | 'bold' | 'total' | 'paid' | 'balance' };
+  type TotalsRow = { label: string; value: string; kind: 'normal' | 'discount' | 'bold' | 'total' | 'balance' };
   const totalsRows: TotalsRow[] = [{ label: 'Subtotal', value: money(data.subtotal), kind: 'normal' }];
   for (const d of discounts) {
     totalsRows.push({ label: `${discountName(d)} (${discountTerms(d)})`, value: `-${money(d.amount)}`, kind: 'discount' });
@@ -426,7 +432,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   }
   totalsRows.push({ label: isQuote ? 'QUOTED TOTAL (SGD)' : 'TOTAL AMOUNT', value: money(data.totalAmount), kind: 'total' });
   if (!isQuote) {
-    totalsRows.push({ label: 'Paid to Date', value: money(data.paidAmount), kind: 'paid' });
     totalsRows.push({ label: 'BALANCE DUE (SGD)', value: money(data.balanceDue), kind: 'balance' });
   }
 
@@ -491,9 +496,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
       const amountW = measure(r.value, 9, fontRegular);
       text(fit(r.label, 9, fontRegular, TW - 20 - amountW - 8), TX + 10, baseline, 9, fontRegular, slate);
       textRight(r.value, RIGHT - 10, baseline, 9, fontRegular, green);
-    } else if (r.kind === 'paid') {
-      text(r.label, TX + 10, baseline, 9, fontRegular, green);
-      textRight(r.value, RIGHT - 10, baseline, 9, fontBold, green);
     } else if (r.kind === 'bold') {
       text(r.label, TX + 10, baseline, 9, fontBold, slate);
       textRight(r.value, RIGHT - 10, baseline, 9, fontBold, ink);

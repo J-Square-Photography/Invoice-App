@@ -14,7 +14,7 @@ export interface NewQuoteInput {
   status?: 'DRAFT' | 'SENT';
 }
 
-/** Quotation numbers look like QUO-2026-8K3F911: the month's shared code, with their own counter. */
+/** Quotation numbers look like QUO-2026-4821371: the month's shared code, with their own counter. */
 export async function generateQuoteNumber(date = new Date()): Promise<string> {
   return nextDocumentNumber('QUO', date);
 }
