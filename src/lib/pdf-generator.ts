@@ -21,6 +21,21 @@ function loadMontserrat() {
   return montserrat;
 }
 
+/** The J Square wordmark drawn in the header; null (text fallback) if the file can't be read. */
+const LOGO_PATH = join(process.cwd(), 'src', 'lib', 'brand', 'logo-wordmark.png');
+let logoBytes: Uint8Array | null | undefined;
+function loadLogo() {
+  if (logoBytes === undefined) {
+    try {
+      logoBytes = new Uint8Array(readFileSync(LOGO_PATH));
+    } catch (err) {
+      console.error('Failed to read PDF logo, falling back to text:', err);
+      logoBytes = null;
+    }
+  }
+  return logoBytes;
+}
+
 export interface InvoicePDFData {
   /** Quotations reuse this layout: no payment details or QR, and dueDate is the valid-until date. */
   documentType?: 'INVOICE' | 'QUOTE';
@@ -222,10 +237,17 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   // ============ 1. TOP BAND + HEADER ============
   fillBox(M, H - 48, CW, 8, brass);
 
-  // The studio's own name, shrunk to fit rather than overlapping the right-aligned block if it's long
-  const studioName = fitSize(cfg.companyName.toUpperCase(), 20, fontBold, CW - 230, 11);
-  text(studioName.text, M, H - 82, studioName.size, fontBold, ink);
-  text('PHOTOGRAPHY  \u00B7  VIDEOGRAPHY  \u00B7  PHOTOBOOTH', M, H - 96, 7.5, fontRegular, faint);
+  // The studio's wordmark; the name as text only if the logo file is missing
+  const logo = loadLogo();
+  if (logo) {
+    const logoImage = await pdfDoc.embedPng(logo);
+    const LOGO_H = 42;
+    page.drawImage(logoImage, { x: M, y: H - 98, width: (logoImage.width / logoImage.height) * LOGO_H, height: LOGO_H });
+  } else {
+    const studioName = fitSize(cfg.companyName.toUpperCase(), 20, fontBold, CW - 230, 11);
+    text(studioName.text, M, H - 82, studioName.size, fontBold, ink);
+  }
+  text('PHOTOGRAPHY  \u00B7  VIDEOGRAPHY  \u00B7  PHOTOBOOTH', M, H - 110, 7.5, fontRegular, faint);
 
   // Company block, right-aligned. The GST registration number appears once one is set in Settings.
   const ADDR_MAX_LINES = 3;
@@ -317,7 +339,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   });
   clientAddressLines.forEach((l, i) => text(l, M + 10, contactY - i * 11, 8.5, fontRegular, slate));
 
-  label('PROJECT / ASSIGNMENT', x2 + 10, stripTop - 15);
+  label('PROJECT / EVENT TITLE', x2 + 10, stripTop - 15);
   const allProjectLines = wrap(data.projectTitle, 11, fontBold, c2 - 20);
   const projectLines = allProjectLines.slice(0, 2);
   if (allProjectLines.length > 2) {
@@ -412,13 +434,37 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   const totalsH = totalsRows.reduce((sum, r) => sum + rowHeight(r.kind), 0);
   const TW = 210;
   const TX = RIGHT - TW;
-  const QR_SIZE = 100;
-  const rightColH = isQuote ? totalsH : totalsH + 14 + QR_SIZE + 30;
+  const rightColH = totalsH;
+
+  // --- PayNow QR (invoices only), drawn inside the payment box right under the Ref line ---
+  const QR_SIZE = 90;
+  const qrAmount = data.balanceDue > 0 ? data.balanceDue : data.totalAmount;
+  // Invoices set to "Static PayNow QR" show the uploaded image instead of a generated code
+  const staticQr = data.paymentMethod === 'PAYNOW_STATIC_QR' ? data.company?.staticQrDataUrl ?? null : null;
+  let qrImage: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null;
+  try {
+    if (isQuote) throw new SkipQr();
+    const qrDataUrl =
+      staticQr ??
+      (await generatePayNowQRDataURL({
+        uen: cfg.uen,
+        amount: qrAmount,
+        reference: data.invoiceNumber,
+        merchantName: cfg.companyName,
+        isEditable: false,
+      }));
+    const parsed = /^data:image\/(png|jpeg);base64,(.+)$/.exec(qrDataUrl);
+    if (!parsed) throw new Error('Unsupported QR image format');
+    const qrImageBytes = Buffer.from(parsed[2], 'base64');
+    qrImage = parsed[1] === 'jpeg' ? await pdfDoc.embedJpg(qrImageBytes) : await pdfDoc.embedPng(qrImageBytes);
+  } catch (err) {
+    if (!(err instanceof SkipQr)) console.error('Failed to embed SGQR code in PDF:', err);
+  }
 
   const LW = TX - 20 - M; // left column width, with a clear gutter before the totals
   const noteLines = data.notes && data.notes.trim() ? wrap(data.notes.trim(), 8.5, fontRegular, LW - 20).slice(0, 8) : [];
   const notesH = noteLines.length > 0 ? 26 + noteLines.length * 11 : 0;
-  const PAY_H = isQuote ? 96 : 140;
+  const PAY_H = isQuote ? 96 : 140 + (qrImage ? QR_SIZE + 10 : 0);
   const leftColH = notesH + (notesH ? 12 : 0) + PAY_H;
 
   // Not enough room left on this page for the whole block: it moves to a fresh page together
@@ -506,37 +552,15 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   text('DBS PayLah!, OCBC, UOB, GrabPay, etc.', px + 10, py, 8, fontRegular, slate);
   py -= 11;
   text(`Ref: ${data.invoiceNumber}`, px + 10, py, 8, fontBold, ink);
+  if (qrImage) {
+    // The QR sits directly under the Ref line, with its caption beside it
+    const qrX = px + 10;
+    const qrBottom = py - 10 - QR_SIZE;
+    page.drawImage(qrImage, { x: qrX, y: qrBottom, width: QR_SIZE, height: QR_SIZE });
+    const capX = qrX + QR_SIZE + 12;
+    text(staticQr ? 'PayNow QR' : 'PayNow SGQR', capX, qrBottom + QR_SIZE / 2 + 3, 8, fontBold, ink);
+    text(staticQr ? `Enter SGD $${qrAmount.toFixed(2)}` : `Scan SGD $${qrAmount.toFixed(2)}`, capX, qrBottom + QR_SIZE / 2 - 8, 7.5, fontRegular, slate);
   }
-
-  // --- PayNow QR, centred under the totals (invoices only) ---
-  try {
-    if (isQuote) throw new SkipQr();
-    const qrAmount = data.balanceDue > 0 ? data.balanceDue : data.totalAmount;
-    // Invoices set to "Static PayNow QR" show the uploaded image instead of a generated code
-    const staticQr = data.paymentMethod === 'PAYNOW_STATIC_QR' ? data.company?.staticQrDataUrl ?? null : null;
-    const qrDataUrl =
-      staticQr ??
-      (await generatePayNowQRDataURL({
-        uen: cfg.uen,
-        amount: qrAmount,
-        reference: data.invoiceNumber,
-        merchantName: cfg.companyName,
-        isEditable: false,
-      }));
-
-    const parsed = /^data:image\/(png|jpeg);base64,(.+)$/.exec(qrDataUrl);
-    if (!parsed) throw new Error('Unsupported QR image format');
-    const qrImageBytes = Buffer.from(parsed[2], 'base64');
-    const qrImage = parsed[1] === 'jpeg' ? await pdfDoc.embedJpg(qrImageBytes) : await pdfDoc.embedPng(qrImageBytes);
-
-    const centreX = TX + TW / 2;
-    const qrTop = zoneTop - totalsH - 14;
-    const qrBottom = qrTop - QR_SIZE;
-    page.drawImage(qrImage, { x: centreX - QR_SIZE / 2, y: qrBottom, width: QR_SIZE, height: QR_SIZE });
-    textCentre(staticQr ? 'PayNow QR' : 'PayNow SGQR', centreX, qrBottom - 12, 8, fontBold, ink);
-    textCentre(staticQr ? `Enter SGD $${qrAmount.toFixed(2)}` : `Scan SGD $${qrAmount.toFixed(2)}`, centreX, qrBottom - 22, 7.5, fontRegular, slate);
-  } catch (err) {
-    if (!(err instanceof SkipQr)) console.error('Failed to embed SGQR code in PDF:', err);
   }
 
   // ============ 6. FOOTER (every page) ============
