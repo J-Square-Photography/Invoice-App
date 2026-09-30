@@ -28,6 +28,7 @@ interface QuoteListItem {
   gstRate: number;
   gstAmount: number;
   totalAmount: number;
+  depositAmount?: number;
   notes: string | null;
   discounts?: unknown;
   project: { id: string; title: string; client: { id: string; companyName: string } };
@@ -110,6 +111,7 @@ function QuotesPageInner() {
       isGstApplied: q.isGstApplied,
       gstRate: q.gstRate,
       notes: q.notes,
+      depositAmount: q.depositAmount ? Number(q.depositAmount) : 0,
       paidAmount: 0,
       project: { id: q.project.id },
       items: q.items,

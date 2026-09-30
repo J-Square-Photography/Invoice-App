@@ -111,7 +111,11 @@ export async function POST(request: NextRequest) {
     if (templateId && !finalBody) {
       const tmpl = CONTRACT_TEMPLATES.find((t) => t.id === templateId) || CONTRACT_TEMPLATES[0];
       finalTitle = finalTitle || tmpl.defaultTitle;
-      const depositAmount = (invoice.totalAmount * 0.5).toFixed(2);
+      const depositAmount = (
+        invoice.depositAmount && Number(invoice.depositAmount) > 0
+          ? Number(invoice.depositAmount)
+          : invoice.totalAmount * 0.5
+      ).toFixed(2);
       const balanceDue = (invoice.totalAmount - parseFloat(depositAmount)).toFixed(2);
 
       const company = resolveCompany(invoice, await getCompanySettings());

@@ -105,7 +105,7 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { status, dueDate, paymentMethod, notes, internalNotes, items, isGstApplied, gstRate, projectId, discounts } = body;
+    const { status, dueDate, paymentMethod, notes, internalNotes, items, isGstApplied, gstRate, projectId, discounts, deposit, depositAmount } = body;
 
     const existing = await prisma.invoice.findUnique({
       where: { id },
@@ -148,7 +148,7 @@ export async function PATCH(
     }
 
     const editsAmounts =
-      items !== undefined || isGstApplied !== undefined || gstRate !== undefined || discounts !== undefined;
+      items !== undefined || isGstApplied !== undefined || gstRate !== undefined || discounts !== undefined || deposit !== undefined || depositAmount !== undefined;
     const changesProject = projectId !== undefined && projectId !== existing.projectId;
 
     if ((editsAmounts || changesProject) && existing.status === 'VOID') {
@@ -229,12 +229,14 @@ export async function PATCH(
       }
 
       const gstOn = isGstApplied ?? existing.isGstApplied;
+      const depositVal = deposit !== undefined ? deposit : depositAmount !== undefined ? depositAmount : existing.depositAmount;
       const totals = calculateInvoiceTotals(rawItems, {
         isGstApplied: gstOn,
         gstRate: gstRate ?? (existing.gstRate || defaultPaymentConfig.gstRate),
         // Percentage discounts depend on the subtotal, so when only the items change the
         // discounts already on the invoice are re-applied to the new subtotal
         discounts: Array.isArray(discounts) ? discounts : discounts === undefined ? parseStoredDiscounts(existing.discounts) : [],
+        deposit: depositVal,
       });
 
       const paid = Number(existing.paidAmount);
@@ -252,6 +254,7 @@ export async function PATCH(
       updateData.discountAmount = totals.discountAmount;
       updateData.discounts =
         totals.discounts.length > 0 ? (totals.discounts as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
+      updateData.depositAmount = totals.depositAmount;
       updateData.isGstApplied = gstOn;
       updateData.gstRate = totals.gstRate;
       updateData.gstAmount = totals.gstAmount;

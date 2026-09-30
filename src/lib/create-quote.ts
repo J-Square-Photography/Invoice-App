@@ -8,6 +8,7 @@ export interface NewQuoteInput {
   validUntil: string | Date;
   isGstApplied: boolean;
   gstRate: number;
+  deposit?: number | string;
   notes?: string | null;
   items: RawInvoiceItemInput[];
   discounts?: RawDiscountInput[];
@@ -25,6 +26,7 @@ export async function createQuote(input: NewQuoteInput) {
     isGstApplied: input.isGstApplied,
     gstRate: input.gstRate,
     discounts: input.discounts ?? [],
+    deposit: input.deposit,
   });
 
   for (let attempt = 0; ; attempt++) {
@@ -37,6 +39,7 @@ export async function createQuote(input: NewQuoteInput) {
           subtotal: totals.subtotal,
           discountAmount: totals.discountAmount,
           discounts: totals.discounts.length > 0 ? (totals.discounts as unknown as Prisma.InputJsonValue) : undefined,
+          depositAmount: totals.depositAmount,
           isGstApplied: input.isGstApplied,
           gstRate: totals.gstRate,
           gstAmount: totals.gstAmount,

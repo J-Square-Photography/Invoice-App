@@ -186,7 +186,11 @@ function ContractsPageInner() {
     setContractTitle(tmpl.defaultTitle);
 
     if (invoice) {
-      const deposit = (invoice.totalAmount * 0.5).toFixed(2);
+      const deposit = (
+        invoice.depositAmount && Number(invoice.depositAmount) > 0
+          ? Number(invoice.depositAmount)
+          : invoice.totalAmount * 0.5
+      ).toFixed(2);
       const balance = (invoice.totalAmount - parseFloat(deposit)).toFixed(2);
       // A sent invoice's contract uses the details that invoice was issued with
       const snap = invoice.paymentSnapshot;

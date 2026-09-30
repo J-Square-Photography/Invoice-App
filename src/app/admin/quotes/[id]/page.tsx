@@ -27,6 +27,7 @@ interface QuoteDetail {
   gstRate: number;
   gstAmount: number;
   totalAmount: number;
+  depositAmount?: number;
   notes: string | null;
   project: {
     id: string;
@@ -149,6 +150,7 @@ export default function QuoteDetailPage() {
     isGstApplied: quote.isGstApplied,
     gstRate: quote.gstRate,
     notes: quote.notes,
+    depositAmount: quote.depositAmount ? Number(quote.depositAmount) : 0,
     paidAmount: 0,
     project: { id: quote.project.id },
     items: quote.items,
@@ -276,6 +278,12 @@ export default function QuoteDetailPage() {
                   <div className="flex justify-between text-neutral-600">
                     <span>GST ({quote.gstRate}%)</span>
                     <span>SGD ${quote.gstAmount.toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(quote.depositAmount ?? 0) > 0 && (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>Deposit Given</span>
+                    <span>-SGD ${Number(quote.depositAmount).toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-neutral-200 pt-2 text-base font-bold">

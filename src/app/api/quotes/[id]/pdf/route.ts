@@ -30,6 +30,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         ? (quote.discounts as unknown as Array<{ name: string; type: string; value: number; amount: number }>)
         : [],
       discountAmount: quote.discountAmount,
+      depositAmount: Number(quote.depositAmount ?? 0),
       isGstApplied: quote.isGstApplied,
       gstRate: quote.gstRate,
       gstAmount: quote.gstAmount,

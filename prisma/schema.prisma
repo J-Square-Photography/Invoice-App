@@ -113,6 +113,8 @@ model Invoice {
   // on subtotal minus discountAmount.
   discountAmount      Decimal             @default(0) @db.Decimal(12, 2)
   discounts           Json?
+  // Deposit given upfront, subtracted from total amount
+  depositAmount       Decimal             @default(0) @db.Decimal(12, 2)
   isGstApplied        Boolean             @default(true)
   gstRate             Float               @default(9)
   gstAmount           Decimal             @default(0) @db.Decimal(12, 2)
@@ -217,6 +219,7 @@ model Quote {
   subtotal       Decimal     @default(0) @db.Decimal(12, 2)
   discountAmount Decimal     @default(0) @db.Decimal(12, 2)
   discounts      Json?
+  depositAmount  Decimal     @default(0) @db.Decimal(12, 2)
   isGstApplied   Boolean     @default(true)
   gstRate        Float       @default(9)
   gstAmount      Decimal     @default(0) @db.Decimal(12, 2)

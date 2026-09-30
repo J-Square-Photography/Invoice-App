@@ -59,6 +59,7 @@ interface InvoiceDetail {
   dueDate: string;
   subtotal: number;
   discountAmount?: number;
+  depositAmount?: number;
   discounts?: Array<{ name: string; type: string; value: number; amount: number; priceBefore: number; priceAfter: number }> | null;
   isGstApplied: boolean;
   gstRate: number;
@@ -598,6 +599,13 @@ export default function InvoiceDetailPage() {
                   <div className="flex justify-between text-neutral-600 text-xs">
                     <span>Singapore GST ({invoice.gstRate}%):</span>
                     <span>SGD ${invoice.gstAmount.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {Number(invoice.depositAmount ?? 0) > 0 && (
+                  <div className="flex justify-between text-xs text-emerald-700 font-medium">
+                    <span>Deposit Given:</span>
+                    <span>-SGD ${Number(invoice.depositAmount).toFixed(2)}</span>
                   </div>
                 )}
 

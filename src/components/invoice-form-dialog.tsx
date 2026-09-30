@@ -66,6 +66,7 @@ export interface EditableInvoice {
   isGstApplied: boolean;
   gstRate: number;
   notes: string | null;
+  depositAmount?: number | null;
   /** Admin-only remarks. Not present on quotations, which don't have this field. */
   internalNotes?: string | null;
   paidAmount: number;
@@ -120,6 +121,7 @@ export function InvoiceFormDialog({
   const [items, setItems] = useState<LineItemInput[]>([{ ...DEFAULT_ITEM }]);
   const [hasStaticQr, setHasStaticQr] = useState(false);
   const [discounts, setDiscounts] = useState<DiscountRow[]>([]);
+  const [deposit, setDeposit] = useState('');
 
   // Amounts/project can't change once a contract exists or the invoice is void
   const lockAmounts = isEdit && (!!invoice?.contract || invoice?.status === 'VOID');
@@ -148,6 +150,7 @@ export function InvoiceFormDialog({
       setGstRate(invoice.gstRate || DEFAULT_GST_RATE);
       setNotes(invoice.notes || '');
       setInternalNotes(invoice.internalNotes || '');
+      setDeposit(invoice.depositAmount && Number(invoice.depositAmount) > 0 ? String(invoice.depositAmount) : '');
       setDiscounts(
         parseStoredDiscounts(invoice.discounts).map((d) => ({
           name: d.name ?? '',
@@ -170,6 +173,7 @@ export function InvoiceFormDialog({
       setPaymentMethod('PAYNOW_QR');
       setIsGstApplied(false);
       setGstRate(DEFAULT_GST_RATE);
+      setDeposit('');
       setNotes('');
       setInternalNotes('');
       setDiscounts([]);
@@ -283,7 +287,7 @@ export function InvoiceFormDialog({
   const discountInputs = discounts.map((d) => ({ name: d.name, type: d.type, value: d.value }));
   const preview = calculateInvoiceTotals(
     items.map((i) => ({ description: i.description, quantity: i.quantity, amount: i.amount })),
-    { isGstApplied, gstRate, discounts: discountInputs }
+    { isGstApplied, gstRate, discounts: discountInputs, deposit }
   );
   // What each row takes off, following the running price down the list (null while a row is empty)
   let runningPrice = preview.subtotal;
@@ -308,10 +312,11 @@ export function InvoiceFormDialog({
       const dateAndMethod = isQuote ? { validUntil: dueDate } : { dueDate, paymentMethod };
       // Quotations don't have an internal-notes field
       const internalNotesField = isQuote ? {} : { internalNotes };
+      const depositVal = deposit ? parseFloat(deposit) : 0;
       if (isEdit && invoice) {
         const body = lockAmounts
           ? { ...dateAndMethod, notes, ...internalNotesField }
-          : { projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, ...internalNotesField, items, discounts: discountInputs };
+          : { projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, ...internalNotesField, items, discounts: discountInputs, depositAmount: depositVal };
         res = await fetch(`${base}/${invoice.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -321,7 +326,7 @@ export function InvoiceFormDialog({
         res = await fetch(base, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, ...internalNotesField, items, discounts: discountInputs }),
+          body: JSON.stringify({ projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, ...internalNotesField, items, discounts: discountInputs, depositAmount: depositVal }),
         });
       }
 
@@ -781,6 +786,32 @@ export function InvoiceFormDialog({
             )}
           </div>
 
+          {/* Deposit Given: in between discounts and total amount calculated */}
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center">
+              <Label htmlFor="inv-deposit" className="text-sm font-semibold">
+                Deposit Given (Optional)
+              </Label>
+              <span className="text-[11px] text-neutral-500">Subtracted from the total</span>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-neutral-500">
+                SGD $
+              </span>
+              <Input
+                id="inv-deposit"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={deposit}
+                onChange={(e) => setDeposit(e.target.value)}
+                disabled={lockAmounts}
+                className="pl-14 text-xs bg-white h-9"
+              />
+            </div>
+          </div>
+
           {/* GST toggle and the price at every stage */}
           <div className="bg-neutral-100 p-4 rounded-lg space-y-2 text-sm">
             <div className="flex justify-between items-center pb-2 border-b border-neutral-200">
@@ -830,6 +861,13 @@ export function InvoiceFormDialog({
                   GST ({gstRate}%{preview.discounts.length > 0 ? ` on $${preview.taxableAmount.toFixed(2)}` : ''}):
                 </span>
                 <span>SGD ${preview.gstAmount.toFixed(2)}</span>
+              </div>
+            )}
+
+            {preview.depositAmount > 0 && (
+              <div className="flex justify-between text-xs text-emerald-700 font-medium">
+                <span>Deposit Given:</span>
+                <span>-SGD ${preview.depositAmount.toFixed(2)}</span>
               </div>
             )}
 

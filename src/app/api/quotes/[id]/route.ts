@@ -37,7 +37,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!existing) return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
 
     const body = await request.json();
-    const { projectId, validUntil, isGstApplied, gstRate, notes, items, discounts, status } = body;
+    const { projectId, validUntil, isGstApplied, gstRate, notes, items, discounts, status, deposit, depositAmount } = body;
 
     // Once converted, the quotation is a record of what was quoted
     if (existing.invoiceId) {
@@ -66,7 +66,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     // Any change to the priced content re-runs the shared calculation
-    const repricing = items !== undefined || discounts !== undefined || isGstApplied !== undefined || gstRate !== undefined;
+    const repricing = items !== undefined || discounts !== undefined || isGstApplied !== undefined || gstRate !== undefined || deposit !== undefined || depositAmount !== undefined;
     let newItems: ReturnType<typeof calculateInvoiceTotals>['items'] | null = null;
     if (repricing) {
       const rawItems =
@@ -77,14 +77,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         return NextResponse.json({ error: 'At least one line item is required' }, { status: 400 });
       }
       const gst = isGstApplied ?? existing.isGstApplied;
+      const depositVal = deposit !== undefined ? deposit : depositAmount !== undefined ? depositAmount : existing.depositAmount;
       const totals = calculateInvoiceTotals(rawItems, {
         isGstApplied: gst,
         gstRate: gstRate ?? existing.gstRate,
         discounts: Array.isArray(discounts) ? discounts : discounts === undefined ? parseStoredDiscounts(existing.discounts) : [],
+        deposit: depositVal,
       });
       data.subtotal = totals.subtotal;
       data.discountAmount = totals.discountAmount;
       data.discounts = totals.discounts.length > 0 ? (totals.discounts as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
+      data.depositAmount = totals.depositAmount;
       data.isGstApplied = gst;
       data.gstRate = totals.gstRate;
       data.gstAmount = totals.gstAmount;

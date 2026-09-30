@@ -46,6 +46,7 @@ export async function GET(
         ? (invoice.discounts as unknown as Array<{ name: string; type: string; value: number; amount: number }>)
         : [],
       discountAmount: invoice.discountAmount,
+      depositAmount: Number(invoice.depositAmount ?? 0),
       isGstApplied: invoice.isGstApplied,
       gstRate: invoice.gstRate,
       gstAmount: invoice.gstAmount,

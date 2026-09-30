@@ -29,6 +29,7 @@ function createPrismaClient() {
       invoice: {
         subtotal: { needs: { subtotal: true }, compute: (invoice) => Number(invoice.subtotal) },
         discountAmount: { needs: { discountAmount: true }, compute: (invoice) => Number(invoice.discountAmount) },
+        depositAmount: { needs: { depositAmount: true }, compute: (invoice) => Number(invoice.depositAmount) },
         gstAmount: { needs: { gstAmount: true }, compute: (invoice) => Number(invoice.gstAmount) },
         totalAmount: { needs: { totalAmount: true }, compute: (invoice) => Number(invoice.totalAmount) },
         paidAmount: { needs: { paidAmount: true }, compute: (invoice) => Number(invoice.paidAmount) },
@@ -41,6 +42,7 @@ function createPrismaClient() {
       quote: {
         subtotal: { needs: { subtotal: true }, compute: (q) => Number(q.subtotal) },
         discountAmount: { needs: { discountAmount: true }, compute: (q) => Number(q.discountAmount) },
+        depositAmount: { needs: { depositAmount: true }, compute: (q) => Number(q.depositAmount) },
         gstAmount: { needs: { gstAmount: true }, compute: (q) => Number(q.gstAmount) },
         totalAmount: { needs: { totalAmount: true }, compute: (q) => Number(q.totalAmount) },
       },

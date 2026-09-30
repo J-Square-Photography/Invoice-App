@@ -257,4 +257,15 @@ describe('invoice PDF layout', () => {
     expect(text).toContain('PAYMENT OPTIONS');
     expect(text).toContain('DBS PayLah!, OCBC, UOB, GrabPay, etc.');
   });
+
+  it('renders Deposit Given on the PDF when deposit is filled', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { depositAmount: 200 } })));
+    expect(text).toContain('Deposit Given');
+    expect(text).toContain('-$200.00');
+  });
+
+  it('does not render Deposit Given on the PDF when deposit is blank or 0', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { depositAmount: 0 } })));
+    expect(text).not.toContain('Deposit Given');
+  });
 });

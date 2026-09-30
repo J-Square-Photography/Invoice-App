@@ -10,6 +10,7 @@ export interface NewInvoiceInput {
   paymentMethod: string | null;
   isGstApplied: boolean;
   gstRate: number;
+  deposit?: number | string;
   notes?: string | null;
   /** Admin-only remarks (e.g. "Converted from quotation..."). Never shown to the client or printed on the PDF. */
   internalNotes?: string | null;
@@ -27,6 +28,7 @@ export async function createDraftInvoice(input: NewInvoiceInput) {
     isGstApplied: input.isGstApplied,
     gstRate: input.gstRate,
     discounts: input.discounts ?? [],
+    deposit: input.deposit,
   });
 
   for (let attempt = 0; ; attempt++) {
@@ -39,6 +41,7 @@ export async function createDraftInvoice(input: NewInvoiceInput) {
           subtotal: totals.subtotal,
           discountAmount: totals.discountAmount,
           discounts: totals.discounts.length > 0 ? (totals.discounts as unknown as Prisma.InputJsonValue) : undefined,
+          depositAmount: totals.depositAmount,
           isGstApplied: input.isGstApplied,
           gstRate: totals.gstRate,
           gstAmount: totals.gstAmount,

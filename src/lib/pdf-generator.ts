@@ -49,6 +49,7 @@ export interface InvoicePDFData {
   /** Discounts in the order applied (each with the dollars it took off). */
   discounts?: Array<{ name: string; type: string; value: number; amount: number }>;
   discountAmount?: number;
+  depositAmount?: number;
   isGstApplied: boolean;
   gstRate: number;
   gstAmount: number;
@@ -430,6 +431,9 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   }
   if (data.isGstApplied) {
     totalsRows.push({ label: `Singapore GST (${data.gstRate}%)`, value: money(data.gstAmount), kind: 'normal' });
+  }
+  if (data.depositAmount && data.depositAmount > 0) {
+    totalsRows.push({ label: 'Deposit Given', value: `-${money(data.depositAmount)}`, kind: 'discount' });
   }
   totalsRows.push({ label: isQuote ? 'QUOTED TOTAL (SGD)' : 'TOTAL AMOUNT', value: money(data.totalAmount), kind: 'total' });
   if (!isQuote) {

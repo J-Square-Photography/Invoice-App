@@ -29,6 +29,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       paymentMethod: source.paymentMethod,
       isGstApplied: source.isGstApplied,
       gstRate: source.gstRate,
+      deposit: Number(source.depositAmount ?? 0),
       notes: source.notes,
       internalNotes: `Duplicated from invoice ${source.invoiceNumber}.`,
       items: source.items.map((i) => ({

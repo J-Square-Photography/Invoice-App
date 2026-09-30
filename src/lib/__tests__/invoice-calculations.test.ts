@@ -218,3 +218,63 @@ describe('describeDiscount (client-facing wording)', () => {
     expect(describeDiscount({ name: 'Promo', type: 'PERCENT', value: 12.5 })).toBe('Promo (12.5% off)');
   });
 });
+
+describe('deposits', () => {
+  const line = [{ description: 'Package', quantity: 1, amount: 1000 }];
+
+  it('subtracts deposit from the existing total', () => {
+    const result = calculateInvoiceTotals(line, {
+      isGstApplied: true,
+      gstRate: 9,
+      discounts: [{ type: 'PERCENT', value: 10 }],
+      deposit: 200,
+    });
+    // Subtotal: 1000, Discount 10%: 100 -> 900 taxable
+    // GST 9%: 81 -> totalBeforeDeposit = 981
+    // Deposit: 200 -> totalAmount = 781
+    expect(result.subtotal).toBe(1000);
+    expect(result.taxableAmount).toBe(900);
+    expect(result.gstAmount).toBe(81);
+    expect(result.totalBeforeDeposit).toBe(981);
+    expect(result.depositAmount).toBe(200);
+    expect(result.totalAmount).toBe(781);
+  });
+
+  it('when deposit is left blank or zero, deposit is not deducted', () => {
+    const emptyResult = calculateInvoiceTotals(line, {
+      isGstApplied: false,
+      gstRate: 9,
+      deposit: '',
+    });
+    expect(emptyResult.depositAmount).toBe(0);
+    expect(emptyResult.totalAmount).toBe(1000);
+
+    const zeroResult = calculateInvoiceTotals(line, {
+      isGstApplied: false,
+      gstRate: 9,
+      deposit: 0,
+    });
+    expect(zeroResult.depositAmount).toBe(0);
+    expect(zeroResult.totalAmount).toBe(1000);
+  });
+
+  it('caps deposit at the total before deposit, never resulting in negative total', () => {
+    const result = calculateInvoiceTotals(line, {
+      isGstApplied: false,
+      gstRate: 9,
+      deposit: 5000,
+    });
+    expect(result.depositAmount).toBe(1000);
+    expect(result.totalAmount).toBe(0);
+  });
+
+  it('clamps negative deposit to 0', () => {
+    const result = calculateInvoiceTotals(line, {
+      isGstApplied: false,
+      gstRate: 9,
+      deposit: -100,
+    });
+    expect(result.depositAmount).toBe(0);
+    expect(result.totalAmount).toBe(1000);
+  });
+});

@@ -50,6 +50,10 @@ export interface InvoiceTotals {
   taxableAmount: number;
   gstRate: number;
   gstAmount: number;
+  /** Total before deposit: taxableAmount + gstAmount. */
+  totalBeforeDeposit: number;
+  /** Deposit already given, subtracted from the existing total. */
+  depositAmount: number;
   totalAmount: number;
 }
 
@@ -128,7 +132,12 @@ export function parseStoredDiscounts(value: unknown): RawDiscountInput[] {
 
 export function calculateInvoiceTotals(
   rawItems: RawInvoiceItemInput[],
-  options: { isGstApplied: boolean; gstRate: number; discounts?: RawDiscountInput[] }
+  options: {
+    isGstApplied: boolean;
+    gstRate: number;
+    discounts?: RawDiscountInput[];
+    deposit?: number | string;
+  }
 ): InvoiceTotals {
   const items = rawItems.map(processInvoiceItem);
   const subtotal = roundCents(items.reduce((sum, item) => sum + item.amount, 0));
@@ -140,9 +149,13 @@ export function calculateInvoiceTotals(
 
   const gstRate = options.isGstApplied ? options.gstRate : 0;
   const gstAmount = options.isGstApplied ? roundCents(taxableAmount * (gstRate / 100)) : 0;
-  const totalAmount = roundCents(taxableAmount + gstAmount);
+  const totalBeforeDeposit = roundCents(taxableAmount + gstAmount);
 
-  return { items, subtotal, discounts, discountAmount, taxableAmount, gstRate, gstAmount, totalAmount };
+  const rawDeposit = Math.max(0, parseFloat(options.deposit?.toString() || '0') || 0);
+  const depositAmount = roundCents(Math.min(rawDeposit, totalBeforeDeposit));
+  const totalAmount = roundCents(totalBeforeDeposit - depositAmount);
+
+  return { items, subtotal, discounts, discountAmount, taxableAmount, gstRate, gstAmount, totalBeforeDeposit, depositAmount, totalAmount };
 }
 /** A discount's own name. Blank names, and the generic ones older invoices stored ("10% discount"), read as just "Discount". */
 export function discountName(d: { name?: string }): string {
