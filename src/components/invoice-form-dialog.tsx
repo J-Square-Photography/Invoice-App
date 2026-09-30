@@ -113,7 +113,7 @@ export function InvoiceFormDialog({
   const [showAllServices, setShowAllServices] = useState(false);
   const [dueDate, setDueDate] = useState(() => (kind === 'quote' ? addOneMonthSingapore() : defaultInvoiceDueDate()));
   const [paymentMethod, setPaymentMethod] = useState('PAYNOW_QR');
-  const [isGstApplied, setIsGstApplied] = useState(true);
+  const [isGstApplied, setIsGstApplied] = useState(false);
   const [gstRate, setGstRate] = useState(DEFAULT_GST_RATE);
   const [notes, setNotes] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
@@ -168,7 +168,7 @@ export function InvoiceFormDialog({
       setSelectedProjectId(defaultProjectId ?? '');
       setDueDate(isQuote ? addOneMonthSingapore() : defaultInvoiceDueDate());
       setPaymentMethod('PAYNOW_QR');
-      setIsGstApplied(true);
+      setIsGstApplied(false);
       setGstRate(DEFAULT_GST_RATE);
       setNotes('');
       setInternalNotes('');
