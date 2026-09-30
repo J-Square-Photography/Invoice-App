@@ -18,26 +18,38 @@ vi.mock('@/lib/prisma', () => ({
         return existing;
       }),
     },
+    invoice: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    quote: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
   },
 }));
 
-import { randomInvoiceCode, formatInvoiceNumber, singaporeYearMonth, nextDocumentNumber } from '../invoice-number';
+import { randomInvoiceCode, formatInvoiceNumber, singaporeYearMonth, nextDocumentNumber, convertQuoteNumberToInvoiceNumber } from '../invoice-number';
 
 describe('invoice numbering', () => {
   beforeEach(() => rows.clear());
 
-  it('generates a 6-digit code', () => {
+  it('generates a 5-digit code', () => {
     for (let i = 0; i < 50; i++) {
       const code = randomInvoiceCode();
-      expect(code).toHaveLength(6);
-      expect(code).toMatch(/^[0-9]+$/);
+      expect(code).toHaveLength(5);
+      expect(code).toMatch(/^[1-9][0-9]{4}$/);
     }
   });
 
   it('formats as series-year-code followed directly by the counter, unpadded', () => {
-    expect(formatInvoiceNumber(2026, '482137', 1)).toBe('JSQ-2026-4821371');
-    expect(formatInvoiceNumber(2026, '482137', 10)).toBe('JSQ-2026-48213710');
-    expect(formatInvoiceNumber(2026, '482137', 2, 'QUO')).toBe('QUO-2026-4821372');
+    expect(formatInvoiceNumber(2026, '87325', 1)).toBe('INV-2026-873251');
+    expect(formatInvoiceNumber(2026, '87325', 10)).toBe('INV-2026-8732510');
+    expect(formatInvoiceNumber(2026, '87325', 2, 'QUO')).toBe('QUO-2026-873252');
+  });
+
+  it('converts quotation numbers to matching invoice numbers', () => {
+    expect(convertQuoteNumberToInvoiceNumber('QUO-2026-873251')).toBe('INV-2026-873251');
+    expect(convertQuoteNumberToInvoiceNumber('QUO-2026-235972')).toBe('INV-2026-235972');
+    expect(convertQuoteNumberToInvoiceNumber('#QUO-2026-873251')).toBe('#INV-2026-873251');
   });
 
   it('uses the Singapore month, not UTC', () => {
@@ -48,28 +60,29 @@ describe('invoice numbering', () => {
 
   it('keeps one code per month and counts up', async () => {
     const sept = new Date('2026-09-10T04:00:00Z');
-    const a = await nextDocumentNumber('JSQ', sept);
-    const b = await nextDocumentNumber('JSQ', sept);
-    const code = a.slice(9, 15);
-    expect(a).toBe(`JSQ-2026-${code}1`);
-    expect(b).toBe(`JSQ-2026-${code}2`);
+    const a = await nextDocumentNumber('INV', sept);
+    const b = await nextDocumentNumber('INV', sept);
+    const code = a.slice(9, 14);
+    expect(a).toBe(`INV-2026-${code}1`);
+    expect(b).toBe(`INV-2026-${code}2`);
   });
 
   it('shares the month code with quotations, which keep their own counter', async () => {
     const sept = new Date('2026-09-10T04:00:00Z');
-    const inv1 = await nextDocumentNumber('JSQ', sept);
-    await nextDocumentNumber('JSQ', sept);
+    const inv1 = await nextDocumentNumber('INV', sept);
+    await nextDocumentNumber('INV', sept);
     const quo1 = await nextDocumentNumber('QUO', sept);
-    const code = inv1.slice(9, 15);
+    const code = inv1.slice(9, 14);
     expect(quo1).toBe(`QUO-2026-${code}1`);
   });
 
   it('starts a new code and counter in a new month', async () => {
-    await nextDocumentNumber('JSQ', new Date('2026-09-10T04:00:00Z'));
-    await nextDocumentNumber('JSQ', new Date('2026-09-11T04:00:00Z'));
-    const oct = await nextDocumentNumber('JSQ', new Date('2026-10-01T04:00:00Z'));
-    expect(oct).toMatch(/^JSQ-2026-[0-9]{6}1$/);
+    await nextDocumentNumber('INV', new Date('2026-09-10T04:00:00Z'));
+    await nextDocumentNumber('INV', new Date('2026-09-11T04:00:00Z'));
+    const oct = await nextDocumentNumber('INV', new Date('2026-10-01T04:00:00Z'));
+    expect(oct).toMatch(/^INV-2026-[0-9]{5}1$/);
     expect(rows.get('2026-10')?.invoiceSeq).toBe(1);
     expect(rows.size).toBe(2);
   });
 });
+

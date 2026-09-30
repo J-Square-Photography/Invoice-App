@@ -5,6 +5,7 @@ import { generateInvoiceNumber, isInvoiceNumberClash } from '@/lib/invoice-numbe
 
 export interface NewInvoiceInput {
   projectId: string;
+  invoiceNumber?: string;
   dueDate: string | Date;
   paymentMethod: string | null;
   isGstApplied: boolean;
@@ -29,7 +30,7 @@ export async function createDraftInvoice(input: NewInvoiceInput) {
   });
 
   for (let attempt = 0; ; attempt++) {
-    const invoiceNumber = await generateInvoiceNumber();
+    const invoiceNumber = input.invoiceNumber || (await generateInvoiceNumber());
     try {
       return await prisma.invoice.create({
         data: {

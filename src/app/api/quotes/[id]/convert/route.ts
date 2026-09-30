@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { parseStoredDiscounts } from '@/lib/invoice-calculations';
 import { createDraftInvoice } from '@/lib/create-invoice';
+import { convertQuoteNumberToInvoiceNumber } from '@/lib/invoice-number';
 import { defaultInvoiceDueDateObject } from '@/lib/time';
 import { logActivity } from '@/lib/activity-log';
 
@@ -39,9 +40,11 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     }
 
     const due = defaultInvoiceDueDateObject(quote.project?.shootDate);
+    const convertedInvoiceNumber = convertQuoteNumberToInvoiceNumber(quote.quoteNumber);
 
     const invoice = await createDraftInvoice({
       projectId: quote.projectId,
+      invoiceNumber: convertedInvoiceNumber,
       dueDate: due,
       paymentMethod: 'PAYNOW_QR',
       isGstApplied: quote.isGstApplied,

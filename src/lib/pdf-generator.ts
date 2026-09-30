@@ -276,7 +276,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   text(isQuote ? 'Quotation' : data.isGstApplied ? 'Tax Invoice' : 'Invoice', M, H - 140, 24, fontBold, ink);
   text(`Issued on ${fmtDate(data.issueDate)}`, M, H - 154, 8.5, fontRegular, slate);
 
-  textRight(`${isQuote ? 'Quotation' : 'Invoice'} #${data.invoiceNumber}`, RIGHT, H - 134, 12, fontBold, ink);
+  const numDisplay = data.invoiceNumber.startsWith('#') ? data.invoiceNumber : `#${data.invoiceNumber}`;
+  textRight(numDisplay, RIGHT, H - 134, 12, fontBold, ink);
   const statusColor = isQuote
     ? data.status === 'ACCEPTED' ? green : data.status === 'DECLINED' ? faint : STRONG
     : data.status === 'PAID' ? green : data.status === 'PARTIAL' ? brass : STRONG;

@@ -2,19 +2,19 @@ import { randomInt } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
 /**
- * Document numbers look like JSQ-2026-4821371: series, year, then a random 6-digit code
+ * Document numbers look like INV-2026-873251 / QUO-2026-873251: series, year, then a random 5-digit code
  * followed directly by a running counter (1, 2, ... 10, 11 - no padding). Every calendar month
- * (Singapore time) gets a fresh random code, shared by that month's invoices (JSQ) and
+ * (Singapore time) gets a fresh random 5-digit code, shared by that month's invoices (INV) and
  * quotations (QUO), and each series' counter starts again at 1. The code is created by the first
  * document of the month, so no scheduled job is needed to roll it over.
  */
-export type NumberSeriesPrefix = 'JSQ' | 'QUO';
+export type NumberSeriesPrefix = 'INV' | 'QUO' | 'JSQ';
 
 export function randomInvoiceCode(): string {
-  return String(randomInt(0, 1_000_000)).padStart(6, '0');
+  return String(randomInt(10_000, 100_000));
 }
 
-export const formatInvoiceNumber = (year: number, code: string, seq: number, series: NumberSeriesPrefix = 'JSQ') =>
+export const formatInvoiceNumber = (year: number, code: string, seq: number, series: NumberSeriesPrefix = 'INV') =>
   `${series}-${year}-${code}${seq}`;
 
 /** The year and month in Singapore, where the studio works - the server itself runs in UTC. */
@@ -28,7 +28,7 @@ export function singaporeYearMonth(date = new Date()): { year: number; month: nu
 export async function nextDocumentNumber(series: NumberSeriesPrefix, date = new Date()): Promise<string> {
   const { year, month } = singaporeYearMonth(date);
   const id = `${year}-${String(month).padStart(2, '0')}`;
-  const seqField = series === 'JSQ' ? 'invoiceSeq' : 'quoteSeq';
+  const seqField = series === 'QUO' ? 'quoteSeq' : 'invoiceSeq';
 
   for (let attempt = 0; ; attempt++) {
     try {
@@ -38,20 +38,57 @@ export async function nextDocumentNumber(series: NumberSeriesPrefix, date = new 
         create: { id, code: randomInvoiceCode(), [seqField]: 1 },
         update: { [seqField]: { increment: 1 } },
       });
-      return formatInvoiceNumber(year, row.code, row[seqField], series);
+      const candidate = formatInvoiceNumber(year, row.code, row[seqField], series);
+
+      // Avoid clashing with any existing records (e.g. invoices converted from quotations)
+      if (series === 'INV' || series === 'JSQ') {
+        const exists = await prisma.invoice.findUnique({
+          where: { invoiceNumber: candidate },
+          select: { id: true },
+        });
+        if (exists) continue;
+      } else if (series === 'QUO') {
+        const exists = await prisma.quote.findUnique({
+          where: { quoteNumber: candidate },
+          select: { id: true },
+        });
+        if (exists) continue;
+      }
+
+      return candidate;
     } catch (error) {
       // Two "first of the month" documents raced to create the row: the retry takes the update path
-      if (attempt < 1 && isInvoiceNumberClash(error)) continue;
+      if (attempt < 5 && isInvoiceNumberClash(error)) continue;
       throw error;
     }
   }
 }
 
 export async function generateInvoiceNumber(date = new Date()): Promise<string> {
-  return nextDocumentNumber('JSQ', date);
+  return nextDocumentNumber('INV', date);
+}
+
+export async function generateQuoteNumber(date = new Date()): Promise<string> {
+  return nextDocumentNumber('QUO', date);
+}
+
+/**
+ * Converts a quotation number to an invoice number by replacing the QUO prefix with INV.
+ * E.g. QUO-2026-873251 -> INV-2026-873251
+ * E.g. #QUO-2026-873251 -> #INV-2026-873251
+ */
+export function convertQuoteNumberToInvoiceNumber(quoteNumber: string): string {
+  if (quoteNumber.startsWith('QUO-')) {
+    return quoteNumber.replace(/^QUO-/, 'INV-');
+  }
+  if (quoteNumber.startsWith('#QUO-')) {
+    return quoteNumber.replace(/^#QUO-/, '#INV-');
+  }
+  return `INV-${quoteNumber}`;
 }
 
 /** True when a create failed on a unique constraint (e.g. an invoice number that already exists). */
 export function isInvoiceNumberClash(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002';
 }
+
