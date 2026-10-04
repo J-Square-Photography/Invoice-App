@@ -268,4 +268,16 @@ describe('invoice PDF layout', () => {
     const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { depositAmount: 0 } })));
     expect(text).not.toContain('Deposit Given');
   });
+
+  it('renders Customer Loyalty DIscount (10% off) completely on PDF without truncation ellipsis', async () => {
+    const bytes = await generateInvoicePDF(
+      invoice({
+        rawDiscounts: [{ name: 'Customer Loyalty DIscount', type: 'PERCENT', value: 10 }],
+      })
+    );
+    const text = await pdfText(bytes);
+    expect(text).toContain('Customer Loyalty DIscount (10% off)');
+    expect(text).not.toContain('Customer Loyalty DIscount (10...');
+    expect(text).not.toContain('Customer Loyalty DIscount...');
+  });
 });

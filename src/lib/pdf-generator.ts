@@ -421,29 +421,68 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   // ============ 5. NOTES + PAYMENT (left) and TOTALS + QR (right) ============
   const discounts = data.discounts ?? [];
-  type TotalsRow = { label: string; value: string; kind: 'normal' | 'discount' | 'bold' | 'total' | 'balance' };
-  const totalsRows: TotalsRow[] = [{ label: 'Subtotal', value: money(data.subtotal), kind: 'normal' }];
+  type RawTotalsRow = { label: string; value: string; kind: 'normal' | 'discount' | 'bold' | 'total' | 'balance' };
+  const rawTotalsRows: RawTotalsRow[] = [{ label: 'Subtotal', value: money(data.subtotal), kind: 'normal' }];
   for (const d of discounts) {
-    totalsRows.push({ label: `${discountName(d)} (${discountTerms(d)})`, value: `-${money(d.amount)}`, kind: 'discount' });
+    rawTotalsRows.push({ label: `${discountName(d)} (${discountTerms(d)})`, value: `-${money(d.amount)}`, kind: 'discount' });
   }
   if (discounts.length > 0) {
-    totalsRows.push({ label: 'Subtotal after discounts', value: money(data.subtotal - (data.discountAmount ?? 0)), kind: 'bold' });
+    rawTotalsRows.push({ label: 'Subtotal after discounts', value: money(data.subtotal - (data.discountAmount ?? 0)), kind: 'bold' });
   }
   if (data.isGstApplied) {
-    totalsRows.push({ label: `Singapore GST (${data.gstRate}%)`, value: money(data.gstAmount), kind: 'normal' });
+    rawTotalsRows.push({ label: `Singapore GST (${data.gstRate}%)`, value: money(data.gstAmount), kind: 'normal' });
   }
   if (data.depositAmount && data.depositAmount > 0) {
-    totalsRows.push({ label: 'Deposit Given', value: `-${money(data.depositAmount)}`, kind: 'discount' });
+    rawTotalsRows.push({ label: 'Deposit Given', value: `-${money(data.depositAmount)}`, kind: 'discount' });
   }
-  totalsRows.push({ label: isQuote ? 'QUOTED TOTAL (SGD)' : 'TOTAL AMOUNT', value: money(data.totalAmount), kind: 'total' });
+  rawTotalsRows.push({ label: isQuote ? 'QUOTED TOTAL (SGD)' : 'TOTAL AMOUNT', value: money(data.totalAmount), kind: 'total' });
   if (!isQuote) {
-    totalsRows.push({ label: 'BALANCE DUE (SGD)', value: money(data.balanceDue), kind: 'balance' });
+    rawTotalsRows.push({ label: 'BALANCE DUE (SGD)', value: money(data.balanceDue), kind: 'balance' });
   }
 
-  const rowHeight = (k: TotalsRow['kind']) => (k === 'total' ? 24 : k === 'balance' ? 26 : 19);
-  const totalsH = totalsRows.reduce((sum, r) => sum + rowHeight(r.kind), 0);
-  const TW = 210;
+  const TW = 230;
   const TX = RIGHT - TW;
+
+  type PreparedTotalsRow = RawTotalsRow & {
+    lines: string[];
+    fontSize: number;
+    height: number;
+  };
+
+  const totalsRows: PreparedTotalsRow[] = rawTotalsRows.map((r) => {
+    if (r.kind === 'discount') {
+      const amountW = measure(r.value, 9, fontRegular);
+      const maxLabelW = TW - 20 - amountW - 8;
+      // 1. Try size 8.5 (fits "Customer Loyalty DIscount (10% off)" cleanly on one line)
+      if (measure(r.label, 8.5, fontRegular) <= maxLabelW) {
+        return { ...r, lines: [r.label], fontSize: 8.5, height: 19 };
+      }
+      // 2. Try size 8
+      if (measure(r.label, 8, fontRegular) <= maxLabelW) {
+        return { ...r, lines: [r.label], fontSize: 8, height: 19 };
+      }
+      // 3. Try size 7.5
+      if (measure(r.label, 7.5, fontRegular) <= maxLabelW) {
+        return { ...r, lines: [r.label], fontSize: 7.5, height: 19 };
+      }
+      // 4. Wrap to up to 2 lines at size 8
+      const wrapped = wrap(r.label, 8, fontRegular, maxLabelW);
+      if (wrapped.length <= 2) {
+        return { ...r, lines: wrapped, fontSize: 8, height: Math.max(19, wrapped.length * 10.5 + 8) };
+      }
+      // 5. Wrap at 7.5
+      const wrappedSmall = wrap(r.label, 7.5, fontRegular, maxLabelW);
+      const lines = wrappedSmall.slice(0, 2);
+      if (wrappedSmall.length > 2) {
+        lines[1] = fit(`${lines[1]} ${wrappedSmall.slice(2).join(' ')}`, 7.5, fontRegular, maxLabelW);
+      }
+      return { ...r, lines, fontSize: 7.5, height: Math.max(19, lines.length * 10 + 8) };
+    }
+    const h = r.kind === 'total' ? 24 : r.kind === 'balance' ? 26 : 19;
+    return { ...r, lines: [r.label], fontSize: 9, height: h };
+  });
+
+  const totalsH = totalsRows.reduce((sum, r) => sum + r.height, 0);
   const rightColH = totalsH;
 
   // --- PayNow QR (invoices only), drawn inside the payment box right under the Ref line ---
@@ -487,7 +526,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   // --- Totals grid ---
   let ty = zoneTop;
   for (const r of totalsRows) {
-    const h = rowHeight(r.kind);
+    const h = r.height;
     if (r.kind === 'total') fillBox(TX, ty - h, TW, h, TINT);
     if (r.kind === 'balance') fillBox(TX, ty - h, TW, h, brassTint);
     const baseline = ty - h / 2 - 3;
@@ -498,8 +537,15 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
       text(r.label, TX + 10, baseline, 9.5, fontBold, ink);
       textRight(r.value, RIGHT - 10, baseline, 11.5, fontBold, ink);
     } else if (r.kind === 'discount') {
-      const amountW = measure(r.value, 9, fontRegular);
-      text(fit(r.label, 9, fontRegular, TW - 20 - amountW - 8), TX + 10, baseline, 9, fontRegular, slate);
+      if (r.lines.length === 1) {
+        text(r.lines[0], TX + 10, baseline, r.fontSize, fontRegular, slate);
+      } else {
+        const lineH = 9.5;
+        const startY = ty - (h - r.lines.length * lineH) / 2 - 7;
+        r.lines.forEach((l, idx) => {
+          text(l, TX + 10, startY - idx * lineH, r.fontSize, fontRegular, slate);
+        });
+      }
       textRight(r.value, RIGHT - 10, baseline, 9, fontRegular, green);
     } else if (r.kind === 'bold') {
       text(r.label, TX + 10, baseline, 9, fontBold, slate);

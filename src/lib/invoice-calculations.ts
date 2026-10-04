@@ -159,7 +159,9 @@ export function calculateInvoiceTotals(
 }
 /** A discount's own name. Blank names, and the generic ones older invoices stored ("10% discount"), read as just "Discount". */
 export function discountName(d: { name?: string }): string {
-  const raw = d.name?.trim() ?? '';
+  let raw = d.name?.trim() ?? '';
+  raw = raw.replace(/\s*\(\s*\d+(\.\d+)?%\s*(off)?\s*\)$/i, '');
+  raw = raw.replace(/\s*\(\s*\$\d+(\.\d+)?\s*(off)?\s*\)$/i, '');
   return !raw || /^(\d+(\.\d+)?% )?discount$/i.test(raw) ? 'Discount' : raw;
 }
 

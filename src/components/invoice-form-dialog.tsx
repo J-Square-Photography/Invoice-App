@@ -30,6 +30,13 @@ import { SERVICE_CATALOGUE, findServiceItem } from '@/lib/service-presets';
 import { tagLabel } from '@/lib/service-tags';
 import { singaporeDateParts, defaultInvoiceDueDate, addOneMonthSingapore } from '@/lib/time';
 import { logCancelledAction } from '@/lib/log-cancel';
+import {
+  getDiscountPresets,
+  saveCustomDiscountPreset,
+  deleteCustomDiscountPreset,
+  formatPresetOptionLabel,
+  type DiscountPreset,
+} from '@/lib/discount-presets';
 
 interface DiscountRow {
   name: string;
@@ -122,6 +129,17 @@ export function InvoiceFormDialog({
   const [hasStaticQr, setHasStaticQr] = useState(false);
   const [discounts, setDiscounts] = useState<DiscountRow[]>([]);
   const [deposit, setDeposit] = useState('');
+  const [discountPresets, setDiscountPresets] = useState<DiscountPreset[]>([]);
+  const [showAddPreset, setShowAddPreset] = useState(false);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [newPresetType, setNewPresetType] = useState<DiscountType>('PERCENT');
+  const [newPresetValue, setNewPresetValue] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setDiscountPresets(getDiscountPresets());
+    }
+  }, [open]);
 
   // Amounts/project can't change once a contract exists or the invoice is void
   const lockAmounts = isEdit && (!!invoice?.contract || invoice?.status === 'VOID');
@@ -282,6 +300,92 @@ export function InvoiceFormDialog({
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
+
+  const handleSelectPreset = (presetId: string) => {
+    if (!presetId) return;
+    const preset = discountPresets.find((p) => p.id === presetId);
+    if (!preset) return;
+    setDiscounts((prev) => {
+      // If only one untouched blank row exists, replace it
+      if (prev.length === 1 && !prev[0].name.trim() && !prev[0].value.trim()) {
+        return [{ name: preset.name, type: preset.type, value: String(preset.value) }];
+      }
+      if (prev.length >= MAX_DISCOUNTS) {
+        toast({
+          title: 'Limit Reached',
+          description: `Maximum of ${MAX_DISCOUNTS} discounts allowed.`,
+          variant: 'destructive',
+        });
+        return prev;
+      }
+      return [...prev, { name: preset.name, type: preset.type, value: String(preset.value) }];
+    });
+    toast({
+      title: 'Preset Added',
+      description: `${formatPresetOptionLabel(preset)} added to discounts.`,
+    });
+  };
+
+  const applyPresetToRow = (index: number, presetId: string) => {
+    if (!presetId) return;
+    const preset = discountPresets.find((p) => p.id === presetId);
+    if (!preset) return;
+    updateDiscount(index, { name: preset.name, type: preset.type, value: String(preset.value) });
+    toast({
+      title: 'Preset Applied',
+      description: `Discount ${index + 1} set to ${formatPresetOptionLabel(preset)}.`,
+    });
+  };
+
+  const handleSavePreset = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPresetName.trim()) {
+      toast({ title: 'Validation Error', description: 'Preset name is required.', variant: 'destructive' });
+      return;
+    }
+    const val = parseFloat(newPresetValue);
+    if (isNaN(val) || val <= 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please enter a valid positive discount amount or percentage.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (newPresetType === 'PERCENT' && val > 100) {
+      toast({
+        title: 'Validation Error',
+        description: 'Percentage cannot exceed 100%.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const saved = saveCustomDiscountPreset({
+      name: newPresetName.trim(),
+      type: newPresetType,
+      value: val,
+    });
+    const refreshed = getDiscountPresets();
+    setDiscountPresets(refreshed);
+    handleSelectPreset(saved.id);
+    toast({
+      title: 'Preset Saved & Added',
+      description: `Saved "${formatPresetOptionLabel(saved)}" as a preset.`,
+    });
+    setNewPresetName('');
+    setNewPresetValue('');
+    setShowAddPreset(false);
+  };
+
+  const handleDeleteCustomPreset = (id: string, name: string) => {
+    deleteCustomDiscountPreset(id);
+    setDiscountPresets(getDiscountPresets());
+    toast({
+      title: 'Preset Removed',
+      description: `Removed preset "${name}".`,
+    });
+  };
 
   // The same calculation the server uses, so the preview always matches the saved invoice
   const discountInputs = discounts.map((d) => ({ name: d.name, type: d.type, value: d.value }));
@@ -660,24 +764,163 @@ export function InvoiceFormDialog({
 
           {/* Discounts: applied one after another, before GST */}
           <div className="space-y-3">
-            <div className="flex justify-between items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <Label className="text-sm font-semibold">Discounts</Label>
                 <p className="text-[11px] text-neutral-500">Applied one after another, top to bottom, before GST</p>
               </div>
               {!lockAmounts && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addDiscount}
-                  disabled={discounts.length >= MAX_DISCOUNTS}
-                  className="h-7 text-xs"
-                >
-                  <Plus className="mr-1 h-3 w-3" /> Add Discount
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAddPreset((v) => !v)}
+                    className="h-7 text-xs"
+                  >
+                    <Plus className="mr-1 h-3 w-3" /> Add a preset
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addDiscount}
+                    disabled={discounts.length >= MAX_DISCOUNTS}
+                    className="h-7 text-xs"
+                  >
+                    <Plus className="mr-1 h-3 w-3" /> Add Blank
+                  </Button>
+                </div>
               )}
             </div>
+
+            {!lockAmounts && (
+              <div className="space-y-2">
+                <select
+                  aria-label="Discounts preset dropdown"
+                  value=""
+                  onChange={(e) => handleSelectPreset(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-xs text-neutral-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-neutral-950 cursor-pointer"
+                >
+                  <option value="">Choose a discount preset…</option>
+                  <optgroup label="── Preset Discounts ──">
+                    {discountPresets
+                      .filter((p) => !p.isCustom)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {formatPresetOptionLabel(p)}
+                        </option>
+                      ))}
+                  </optgroup>
+                  {discountPresets.some((p) => p.isCustom) && (
+                    <optgroup label="── Custom Presets ──">
+                      {discountPresets
+                        .filter((p) => p.isCustom)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {formatPresetOptionLabel(p)}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
+                </select>
+
+                {showAddPreset && (
+                  <div className="rounded-md border border-neutral-300 bg-neutral-100 p-3 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-neutral-900">Create New Discount Preset</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddPreset(false)}
+                        className="text-xs text-neutral-500 hover:text-neutral-800"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <Input
+                        placeholder="Preset Name (e.g. VIP Partner)"
+                        value={newPresetName}
+                        onChange={(e) => setNewPresetName(e.target.value)}
+                        className="h-8 flex-1 text-xs bg-white"
+                      />
+                      <div className="flex items-center gap-2">
+                        <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-neutral-300" role="group">
+                          <button
+                            type="button"
+                            onClick={() => setNewPresetType('PERCENT')}
+                            className={cn(
+                              'h-8 w-9 text-xs font-bold transition-colors',
+                              newPresetType === 'PERCENT'
+                                ? 'bg-neutral-900 text-neutral-50'
+                                : 'bg-white text-neutral-700 hover:bg-neutral-100'
+                            )}
+                          >
+                            %
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNewPresetType('FLAT')}
+                            className={cn(
+                              'h-8 w-9 text-xs font-bold transition-colors',
+                              newPresetType === 'FLAT'
+                                ? 'bg-neutral-900 text-neutral-50'
+                                : 'bg-white text-neutral-700 hover:bg-neutral-100'
+                            )}
+                          >
+                            $
+                          </button>
+                        </div>
+                        <Input
+                          type="number"
+                          min="0"
+                          max={newPresetType === 'PERCENT' ? 100 : undefined}
+                          step="0.01"
+                          placeholder={newPresetType === 'PERCENT' ? '10' : '50.00'}
+                          value={newPresetValue}
+                          onChange={(e) => setNewPresetValue(e.target.value)}
+                          className="h-8 w-24 text-right text-xs bg-white"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleSavePreset}
+                          className="h-8 text-xs bg-neutral-900 text-white hover:bg-neutral-800"
+                        >
+                          Save Preset
+                        </Button>
+                      </div>
+                    </div>
+
+                    {discountPresets.some((p) => p.isCustom) && (
+                      <div className="pt-2 border-t border-neutral-200/80 space-y-1.5">
+                        <span className="text-[11px] font-medium text-neutral-600">Saved Custom Presets:</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {discountPresets
+                            .filter((p) => p.isCustom)
+                            .map((p) => (
+                              <span
+                                key={p.id}
+                                className="inline-flex items-center gap-1.5 rounded bg-white px-2 py-0.5 text-xs border border-neutral-200 text-neutral-800 shadow-sm"
+                              >
+                                <span>{formatPresetOptionLabel(p)}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCustomPreset(p.id, p.name)}
+                                  className="text-neutral-400 hover:text-red-600"
+                                  title="Delete custom preset"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {discounts.length === 0 ? (
               <p className="rounded-md border border-dashed border-neutral-300 px-3 py-2.5 text-xs text-neutral-500">
@@ -774,6 +1017,38 @@ export function InvoiceFormDialog({
                           </div>
                         )}
                       </div>
+                      {!lockAmounts && (
+                        <div className="flex items-center justify-between px-0.5 pt-0.5">
+                          <select
+                            aria-label={`Apply preset to discount ${idx + 1}`}
+                            value=""
+                            onChange={(e) => applyPresetToRow(idx, e.target.value)}
+                            className="text-[11px] text-neutral-500 hover:text-neutral-800 bg-transparent border-0 p-0 cursor-pointer focus:ring-0 max-w-full"
+                          >
+                            <option value="">⚡ Swap this with a discount preset…</option>
+                            <optgroup label="── Preset Discounts ──">
+                              {discountPresets
+                                .filter((p) => !p.isCustom)
+                                .map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {formatPresetOptionLabel(p)}
+                                  </option>
+                                ))}
+                            </optgroup>
+                            {discountPresets.some((p) => p.isCustom) && (
+                              <optgroup label="── Custom Presets ──">
+                                {discountPresets
+                                  .filter((p) => p.isCustom)
+                                  .map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {formatPresetOptionLabel(p)}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                            )}
+                          </select>
+                        </div>
+                      )}
                       <p className="pl-8 text-[11px] text-neutral-500">
                         {stage
                           ? `Takes off SGD $${stage.amount.toFixed(2)}: price goes from $${stage.priceBefore.toFixed(2)} to $${stage.priceAfter.toFixed(2)}`
