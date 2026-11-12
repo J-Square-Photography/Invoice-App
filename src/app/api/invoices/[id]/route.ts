@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { parseOptionalDate, isBeforeIssueDate } from '@/lib/time';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
@@ -105,7 +106,7 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { status, dueDate, paymentMethod, notes, internalNotes, items, isGstApplied, gstRate, projectId, discounts, deposit, depositAmount } = body;
+    const { status, issueDate, dueDate, paymentMethod, notes, internalNotes, items, isGstApplied, gstRate, projectId, discounts, deposit, depositAmount } = body;
 
     const existing = await prisma.invoice.findUnique({
       where: { id },
@@ -180,6 +181,17 @@ export async function PATCH(
       if (Number.isNaN(due.getTime())) return NextResponse.json({ error: 'Invalid due date' }, { status: 400 });
       updateData.dueDate = due;
     }
+    if (issueDate !== undefined) {
+      const issue = parseOptionalDate(issueDate);
+      if (!issue || issue === 'invalid') return NextResponse.json({ error: 'Invalid issue date' }, { status: 400 });
+      updateData.issueDate = issue;
+    }
+    if (
+      (issueDate !== undefined || dueDate !== undefined) &&
+      isBeforeIssueDate((updateData.dueDate as Date | undefined) ?? existing.dueDate, (updateData.issueDate as Date | undefined) ?? existing.issueDate)
+    ) {
+      return NextResponse.json({ error: 'The due date cannot be before the issue date' }, { status: 400 });
+    }
     if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
     if (notes !== undefined) updateData.notes = notes || null;
     if (internalNotes !== undefined) updateData.internalNotes = internalNotes || null;
@@ -220,6 +232,7 @@ export async function PATCH(
         ? items
         : existing.items.map((i) => ({
             description: i.description,
+            details: i.details,
             quantity: i.quantity,
             unitPrice: Number(i.unitPrice),
           }));

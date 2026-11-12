@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { parseOptionalDate, isBeforeIssueDate } from '@/lib/time';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       projectId,
+      issueDate,
       validUntil,
       isGstApplied = defaultPaymentConfig.isGstRegistered,
       gstRate = defaultPaymentConfig.gstRate,
@@ -67,11 +69,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'At least one line item is required' }, { status: 400 });
     }
 
+    const issue = parseOptionalDate(issueDate);
+    const valid = parseOptionalDate(validUntil);
+    if (issue === 'invalid') return NextResponse.json({ error: 'Invalid issue date' }, { status: 400 });
+    if (valid === 'invalid') return NextResponse.json({ error: 'Invalid valid-until date' }, { status: 400 });
+    if (valid && isBeforeIssueDate(valid, issue ?? new Date())) {
+      return NextResponse.json({ error: 'The valid-until date cannot be before the issue date' }, { status: 400 });
+    }
+
     const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
     const quote = await createQuote({
       projectId,
+      issueDate: issue,
       validUntil,
       isGstApplied,
       gstRate,

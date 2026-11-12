@@ -7,10 +7,38 @@ export interface PhotoboothPackage {
   packageType: 'Package A' | 'Package B' | 'Package C' | 'Add-on';
   price: number;
   description: string;
-  features: string[];
+  /** "What's included" bullets for the invoice line (one per line), or undefined for add-ons. */
+  details?: string;
 }
 
-export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
+/**
+ * What every photobooth package includes, in the order shown on the invoice. `only` limits a
+ * bullet to the packages that include it. Package C is digital only, so it has none of the printing
+ * bullets.
+ */
+const WITH_PRINTS: PhotoboothPackage['packageType'][] = ['Package A', 'Package B'];
+
+export const PHOTOBOOTH_INCLUSIONS: Array<{ text: string; only?: PhotoboothPackage['packageType'][] }> = [
+  { text: 'Professional DSLR camera with studio lighting' },
+  { text: 'Industry standard printer with high-quality, fast printing', only: WITH_PRINTS },
+  { text: 'Unlimited prints', only: WITH_PRINTS },
+  { text: 'Range of backdrops for your selection' },
+  { text: 'Complimentary props provided' },
+  { text: 'Customised graphic designs for photo frame templates' },
+  { text: 'Print format: choice of Strips or 4R', only: WITH_PRINTS },
+  { text: 'Professional media crew on-site', only: ['Package A'] },
+  { text: 'LCD panel display customisation', only: ['Package A'] },
+];
+
+/** The "What's included" text for a package (one bullet per line); empty for add-ons. */
+export function photoboothInclusions(packageType: PhotoboothPackage['packageType']): string {
+  if (packageType === 'Add-on') return '';
+  return PHOTOBOOTH_INCLUSIONS.filter((i) => !i.only || i.only.includes(packageType))
+    .map((i) => i.text)
+    .join('\n');
+}
+
+const PACKAGES: PhotoboothPackage[] = [
   // --- 2 HOURS EVENT ---
   {
     id: 'pb-2h-a',
@@ -21,14 +49,6 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     packageType: 'Package A',
     price: 538,
     description: 'Photobooth - 2 Hours Event (Package A: Full Crew, Setup & Unlimited Instant Prints)',
-    features: [
-      '2 Hours live operating time',
-      'Full crew (Main Operator + Assistant)',
-      'Setup & teardown included',
-      'Unlimited high-speed instant 4R/2R prints',
-      'Customized print border design',
-      'Online digital gallery & instant QR download',
-    ],
   },
   {
     id: 'pb-2h-b',
@@ -38,14 +58,7 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     durationHours: 2,
     packageType: 'Package B',
     price: 468,
-    description: 'Photobooth - 2 Hours Event (Package B: Setup & Unlimited Prints, Self-Service / No Crew)',
-    features: [
-      '2 Hours live operating time',
-      'Automated setup & teardown included',
-      'Unlimited high-speed instant prints',
-      'Self-service booth (No on-site crew)',
-      'Online digital gallery & instant QR download',
-    ],
+    description: 'Photobooth - 2 Hours Event (Package B: Setup & Unlimited Prints, Self-Service)',
   },
   {
     id: 'pb-2h-c',
@@ -55,14 +68,7 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     durationHours: 2,
     packageType: 'Package C',
     price: 368,
-    description: 'Photobooth - 2 Hours Event (Package C: Digital Only, Setup, No Prints, No Crew)',
-    features: [
-      '2 Hours live operating time',
-      'Digital soft copies only (Instant QR / AirDrop)',
-      'Automated setup & teardown included',
-      'No physical prints & No on-site crew',
-      'Online digital gallery',
-    ],
+    description: 'Photobooth - 2 Hours Event (Package C: Digital Only, Setup, No Prints, Self-Service)',
   },
 
   // --- 3 HOURS EVENT ---
@@ -75,14 +81,6 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     packageType: 'Package A',
     price: 638,
     description: 'Photobooth - 3 Hours Event (Package A: Full Crew, Setup & Unlimited Instant Prints)',
-    features: [
-      '3 Hours live operating time',
-      'Full crew (Main Operator + Assistant)',
-      'Setup & teardown included',
-      'Unlimited high-speed instant 4R/2R prints',
-      'Customized print border design',
-      'Online digital gallery & instant QR download',
-    ],
   },
   {
     id: 'pb-3h-b',
@@ -92,14 +90,7 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     durationHours: 3,
     packageType: 'Package B',
     price: 568,
-    description: 'Photobooth - 3 Hours Event (Package B: Setup & Unlimited Prints, No Crew)',
-    features: [
-      '3 Hours live operating time',
-      'Automated setup & teardown included',
-      'Unlimited high-speed instant prints',
-      'Self-service booth (No on-site crew)',
-      'Online digital gallery & instant QR download',
-    ],
+    description: 'Photobooth - 3 Hours Event (Package B: Setup & Unlimited Prints, Self-Service)',
   },
   {
     id: 'pb-3h-c',
@@ -109,14 +100,7 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     durationHours: 3,
     packageType: 'Package C',
     price: 468,
-    description: 'Photobooth - 3 Hours Event (Package C: Digital Only with On-Site Crew)',
-    features: [
-      '3 Hours live operating time',
-      'On-site operator assistance included',
-      'Digital soft copies only (Instant QR / AirDrop)',
-      'No physical prints',
-      'Online digital gallery',
-    ],
+    description: 'Photobooth - 3 Hours Event (Package C: Digital Only, Setup, No Prints, Self-Service)',
   },
 
   // --- 4 HOURS EVENT ---
@@ -129,14 +113,6 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     packageType: 'Package A',
     price: 738,
     description: 'Photobooth - 4 Hours Event (Package A: Full Crew, Setup & Unlimited Instant Prints)',
-    features: [
-      '4 Hours live operating time',
-      'Full crew (Main Operator + Assistant)',
-      'Setup & teardown included',
-      'Unlimited high-speed instant 4R/2R prints',
-      'Customized print border design',
-      'Online digital gallery & instant QR download',
-    ],
   },
   {
     id: 'pb-4h-b',
@@ -146,14 +122,7 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     durationHours: 4,
     packageType: 'Package B',
     price: 668,
-    description: 'Photobooth - 4 Hours Event (Package B: Setup & Unlimited Prints, No Crew)',
-    features: [
-      '4 Hours live operating time',
-      'Automated setup & teardown included',
-      'Unlimited high-speed instant prints',
-      'Self-service booth (No on-site crew)',
-      'Online digital gallery & instant QR download',
-    ],
+    description: 'Photobooth - 4 Hours Event (Package B: Setup & Unlimited Prints, Self-Service)',
   },
   {
     id: 'pb-4h-c',
@@ -163,14 +132,7 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     durationHours: 4,
     packageType: 'Package C',
     price: 518,
-    description: 'Photobooth - 4 Hours Event (Package C: Digital Only with On-Site Crew)',
-    features: [
-      '4 Hours live operating time',
-      'On-site operator assistance included',
-      'Digital soft copies only (Instant QR / AirDrop)',
-      'No physical prints',
-      'Online digital gallery',
-    ],
+    description: 'Photobooth - 4 Hours Event (Package C: Digital Only, Setup, No Prints, Self-Service)',
   },
 
   // --- POPULAR ADD-ONS ---
@@ -183,7 +145,6 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     packageType: 'Add-on',
     price: 100,
     description: 'Photobooth Extension - Additional 1 Hour Operating Time',
-    features: ['1 additional hour of live photobooth operation and printing'],
   },
   {
     id: 'pb-addon-backdrop',
@@ -194,7 +155,6 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     packageType: 'Add-on',
     price: 60,
     description: 'Photobooth - Custom Themed Backdrop Setup & Teardown',
-    features: ['Physical studio backdrop frame and themed fabric/shimmer curtain'],
   },
   {
     id: 'pb-addon-design',
@@ -205,7 +165,6 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     packageType: 'Add-on',
     price: 25,
     description: 'Photobooth - Custom Graphic Design for Photo Print Borders & Overlays',
-    features: ['Personalized event logo, typography, and theme styling for photo printouts'],
   },
   {
     id: 'pb-addon-prints',
@@ -216,9 +175,13 @@ export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = [
     packageType: 'Add-on',
     price: 88,
     description: 'Photobooth - Unlimited Instant 4R / 2R Photo Prints Add-On',
-    features: ['High-speed thermal sub-dye photo printing with protective gloss coat'],
   },
 ];
+
+export const PHOTOBOOTH_PACKAGES: PhotoboothPackage[] = PACKAGES.map((p) => {
+  const details = photoboothInclusions(p.packageType);
+  return details ? { ...p, details } : p;
+});
 
 export const PHOTOBOOTH_CATEGORIES = [
   '2 Hours',

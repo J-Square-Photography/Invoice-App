@@ -5,6 +5,8 @@ import { nextDocumentNumber, isInvoiceNumberClash } from '@/lib/invoice-number';
 
 export interface NewQuoteInput {
   projectId: string;
+  /** Defaults to now. */
+  issueDate?: string | Date;
   validUntil: string | Date;
   isGstApplied: boolean;
   gstRate: number;
@@ -44,6 +46,7 @@ export async function createQuote(input: NewQuoteInput) {
           gstRate: totals.gstRate,
           gstAmount: totals.gstAmount,
           totalAmount: totals.totalAmount,
+          ...(input.issueDate ? { issueDate: new Date(input.issueDate) } : {}),
           validUntil: new Date(input.validUntil),
           status: input.status ?? 'DRAFT',
           notes: input.notes || null,

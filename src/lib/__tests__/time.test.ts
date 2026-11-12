@@ -5,6 +5,9 @@ import {
   startOfSingaporeYear,
   currentSingaporeMonth,
   singaporeDateParts,
+  singaporeDateString,
+  parseOptionalDate,
+  isBeforeIssueDate,
   addOneMonthSingapore,
   defaultInvoiceDueDate,
   defaultInvoiceDueDateObject,
@@ -59,3 +62,23 @@ describe('Singapore time', () => {
   });
 });
 
+
+describe('issue date helpers', () => {
+  it('gives the Singapore calendar date, even when it is still the previous day in UTC', () => {
+    expect(singaporeDateString(new Date('2026-11-11T17:30:00Z'))).toBe('2026-11-12');
+    expect(singaporeDateString('2026-11-12')).toBe('2026-11-12');
+  });
+
+  it('reads an optional date from a request body', () => {
+    expect(parseOptionalDate(undefined)).toBeUndefined();
+    expect(parseOptionalDate('')).toBeUndefined();
+    expect(parseOptionalDate('not a date')).toBe('invalid');
+    expect(parseOptionalDate('2026-11-12')).toEqual(new Date('2026-11-12'));
+  });
+
+  it('flags a due date earlier than the issue date, but allows the same day', () => {
+    expect(isBeforeIssueDate('2026-11-11', '2026-11-12')).toBe(true);
+    expect(isBeforeIssueDate('2026-11-12', '2026-11-12')).toBe(false);
+    expect(isBeforeIssueDate('2026-11-12', new Date('2026-11-12T09:00:00+08:00'))).toBe(false);
+  });
+});

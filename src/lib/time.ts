@@ -14,6 +14,28 @@ export function singaporeDateParts(now: Date = new Date()): { year: number; mont
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
+/** 'YYYY-MM-DD' for the given moment's Singapore calendar date, the format date inputs use. */
+export function singaporeDateString(date: Date | string = new Date()): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const { year, month, day } = singaporeDateParts(Number.isNaN(d.getTime()) ? new Date() : d);
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+/**
+ * Reads an optional date from a request body: undefined/empty means "not given", an unparseable
+ * value is reported as 'invalid' so the route can answer 400.
+ */
+export function parseOptionalDate(value: unknown): Date | undefined | 'invalid' {
+  if (value === undefined || value === null || value === '') return undefined;
+  const d = new Date(value as string);
+  return Number.isNaN(d.getTime()) ? 'invalid' : d;
+}
+
+/** True when the due / valid-until date falls on an earlier Singapore calendar day than the issue date. */
+export function isBeforeIssueDate(due: Date | string, issue: Date | string): boolean {
+  return singaporeDateString(due) < singaporeDateString(issue);
+}
+
 export function startOfSingaporeDay(now: Date = new Date()): Date {
   const { year, month, day } = singaporeDateParts(now);
   return new Date(`${year}-${pad(month)}-${pad(day)}T00:00:00${SG_OFFSET}`);

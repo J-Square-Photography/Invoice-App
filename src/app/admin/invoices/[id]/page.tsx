@@ -88,6 +88,7 @@ interface InvoiceDetail {
   items: Array<{
     id: string;
     description: string;
+    details?: string | null;
     quantity: number;
     unitPrice: number;
     amount: number;
@@ -556,7 +557,16 @@ export default function InvoiceDetailPage() {
                   <tbody className="divide-y divide-neutral-100">
                     {invoice.items.map((item) => (
                       <tr key={item.id}>
-                        <td className="py-3 px-4 text-neutral-900">{item.description}</td>
+                        <td className="py-3 px-4 text-neutral-900">
+                          {item.description}
+                          {item.details && (
+                          <ul className="mt-1 list-disc pl-4 space-y-0.5 text-xs text-neutral-500">
+                            {item.details.split('\n').map((d, n) => (
+                              <li key={n}>{d}</li>
+                            ))}
+                          </ul>
+                        )}
+                        </td>
                         <td className="py-3 px-4 text-center text-neutral-600">{item.quantity}</td>
                         <td className="py-3 px-4 text-right text-neutral-600 whitespace-nowrap">{item.amount === 0 ? '-' : `SGD $${item.unitPrice.toFixed(2)}`}</td>
                         <td className="py-3 px-4 text-right font-medium text-neutral-900 whitespace-nowrap">{item.amount === 0 ? 'Included' : `SGD $${item.amount.toFixed(2)}`}</td>

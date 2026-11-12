@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { defaultPaymentConfig, type CompanyPaymentConfig } from './payment-config';
 import { generatePayNowPayload, generatePayNowQRDataURL } from './sgqr';
-import { discountName, discountTerms } from './invoice-calculations';
+import { discountName, discountTerms, detailLines } from './invoice-calculations';
 import { loadUnicodeFonts, splitRuns } from './pdf-unicode';
 
 /** Brand typeface (J Square Brand Guide: Montserrat). Read once per warm serverless instance. */
@@ -70,6 +70,8 @@ export interface InvoicePDFData {
   company?: CompanyPaymentConfig & { staticQrDataUrl?: string | null };
   items: Array<{
     description: string;
+    /** "What's included" bullets, one per line, drawn smaller under the description. */
+    details?: string | null;
     quantity: number;
     unitPrice: number;
     amount: number;
@@ -137,6 +139,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     cfg.bankName,
     cfg.bankAccountName,
     ...data.items.map((i) => i.description),
+    ...data.items.map((i) => i.details ?? ''),
     ...(data.discounts ?? []).map((d) => d.name),
   ]);
   const measure = (s: string, size: number, font: Font) =>
@@ -232,8 +235,10 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   const edgeBox = (x: number, yBottom: number, w: number, h: number, color: Colour = STRONG, thickness = EDGE) =>
     page.drawRectangle({ x, y: yBottom, width: w, height: h, borderColor: color, borderWidth: thickness });
   const money = (n: number) => `$${n.toFixed(2)}`;
+  // Always Singapore dates: the server runs in UTC, so a document issued between midnight and 8am
+  // Singapore time would otherwise print the previous day.
   const fmtDate = (d: string | Date) =>
-    new Date(d).toLocaleDateString('en-SG', { year: 'numeric', month: 'short', day: 'numeric' });
+    new Date(d).toLocaleDateString('en-SG', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Singapore' });
 
   // ============ 1. TOP BAND + HEADER ============
   fillBox(M, H - 48, CW, 8, brass);
@@ -394,9 +399,23 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   drawTableHeader();
 
+  // "What's included" bullets under a description: smaller, in the secondary colour, with a hanging
+  // indent so a bullet that wraps lines up under its own text rather than under the bullet mark.
+  const DETAIL_SIZE = 8;
+  const DETAIL_LINE_H = 10.5;
+  const DETAIL_GAP = 4; // space between the description and its first bullet
+  const bulletIndent = 8;
+  const bulletTextX = M + cellPad + bulletIndent + measure('•', DETAIL_SIZE, fontRegular) + 4;
+  const bulletTextW = descW - (bulletTextX - (M + cellPad));
+  const layoutDetails = (details: string | null | undefined) =>
+    detailLines(details).map((d) => wrap(d, DETAIL_SIZE, fontRegular, bulletTextW));
+
   for (const item of data.items) {
     const lines = item ? wrap(item.description, 9, fontRegular, descW) : [];
-    const rowH = Math.max(ROW_MIN, lines.length * 11.5 + 12);
+    const bullets = item ? layoutDetails(item.details) : [];
+    const bulletLineCount = bullets.reduce((n, b) => n + b.length, 0);
+    const detailsH = bulletLineCount > 0 ? DETAIL_GAP + bulletLineCount * DETAIL_LINE_H : 0;
+    const rowH = Math.max(ROW_MIN, lines.length * 11.5 + detailsH + 12);
     if (y - rowH < FOOTER_Y + 60) {
       closeTableSegment();
       newPage();
@@ -406,6 +425,14 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     }
     if (item) {
       lines.forEach((l, i) => text(l, M + cellPad, y - 15 - i * 11.5, 9, fontRegular, ink));
+      let by = y - 15 - (lines.length - 1) * 11.5 - 11.5 - DETAIL_GAP + 1;
+      for (const bullet of bullets) {
+        text('•', M + cellPad + bulletIndent, by, DETAIL_SIZE, fontRegular, slate);
+        for (const l of bullet) {
+          text(l, bulletTextX, by, DETAIL_SIZE, fontRegular, slate);
+          by -= DETAIL_LINE_H;
+        }
+      }
       textCentre(String(item.quantity), (qtyX + amtX) / 2, y - 15, 9, fontRegular, slate);
       if (item.amount === 0) {
         // A no-charge line (e.g. "Culling and editing") reads as included rather than $0.00

@@ -34,6 +34,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       internalNotes: `Duplicated from invoice ${source.invoiceNumber}.`,
       items: source.items.map((i) => ({
         description: i.description,
+        details: i.details,
         quantity: i.quantity,
         amount: Number(i.amount),
       })),

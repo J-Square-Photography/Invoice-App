@@ -65,6 +65,7 @@ export async function GET(
       projectTitle: invoice.project.title,
       items: invoice.items.map((item) => ({
         description: item.description,
+        details: item.details,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         amount: item.amount,

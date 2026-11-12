@@ -35,7 +35,7 @@ interface QuoteDetail {
     serviceTags?: string[];
     client: { id: string; companyName: string; contactName: string; email: string | null; phone: string | null; address: string | null };
   };
-  items: Array<{ id: string; description: string; quantity: number; unitPrice: number; amount: number }>;
+  items: Array<{ id: string; description: string; details?: string | null; quantity: number; unitPrice: number; amount: number }>;
   invoice: { id: string; invoiceNumber: string; status: string } | null;
 }
 
@@ -145,6 +145,7 @@ export default function QuoteDetailPage() {
     id: quote.id,
     invoiceNumber: quote.quoteNumber,
     status: quote.status,
+    issueDate: quote.issueDate,
     dueDate: quote.validUntil,
     paymentMethod: null,
     isGstApplied: quote.isGstApplied,
@@ -255,7 +256,16 @@ export default function QuoteDetailPage() {
                   <tbody className="divide-y divide-neutral-100">
                     {quote.items.map((i) => (
                       <tr key={i.id}>
-                        <td className="py-3 px-4">{i.description}</td>
+                        <td className="py-3 px-4">
+                          {i.description}
+                          {i.details && (
+                          <ul className="mt-1 list-disc pl-4 space-y-0.5 text-xs text-neutral-500">
+                            {i.details.split('\n').map((d, n) => (
+                              <li key={n}>{d}</li>
+                            ))}
+                          </ul>
+                        )}
+                        </td>
                         <td className="py-3 px-4 text-center text-neutral-600">{i.quantity}</td>
                         <td className="py-3 px-4 text-right font-medium">{i.amount > 0 ? `SGD $${i.amount.toFixed(2)}` : 'Included'}</td>
                       </tr>

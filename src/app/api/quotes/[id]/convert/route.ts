@@ -52,7 +52,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       deposit: Number(quote.depositAmount ?? 0),
       notes: quote.notes,
       internalNotes: `Converted from quotation ${quote.quoteNumber}.`,
-      items: quote.items.map((i) => ({ description: i.description, quantity: i.quantity, amount: Number(i.amount) })),
+      items: quote.items.map((i) => ({ description: i.description, details: i.details, quantity: i.quantity, amount: Number(i.amount) })),
       discounts: parseStoredDiscounts(quote.discounts),
     });
 

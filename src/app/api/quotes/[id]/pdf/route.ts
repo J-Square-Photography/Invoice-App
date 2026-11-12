@@ -49,6 +49,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       projectTitle: quote.project.title,
       items: quote.items.map((item) => ({
         description: item.description,
+        details: item.details,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         amount: item.amount,

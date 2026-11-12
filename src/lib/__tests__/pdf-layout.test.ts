@@ -3,6 +3,7 @@ import { PDFDocument } from 'pdf-lib';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { generateInvoicePDF, type InvoicePDFData } from '../pdf-generator';
 import { calculateInvoiceTotals } from '../invoice-calculations';
+import { PHOTOBOOTH_PACKAGES } from '../photobooth-presets';
 
 const COMPANY = {
   companyName: 'J Square Photography',
@@ -21,14 +22,14 @@ const COMPANY = {
 
 type RawDiscount = { name: string; type: string; value: number };
 type Options = {
-  items?: Array<{ description: string; amount: number }>;
+  items?: Array<{ description: string; details?: string; amount: number }>;
   rawDiscounts?: RawDiscount[];
   overrides?: Partial<Omit<InvoicePDFData, 'items' | 'discounts'>>;
 };
 
 function invoice({ items = [{ description: 'Event Photography (Novice, 3 hours)', amount: 180 }], rawDiscounts, overrides }: Options = {}): InvoicePDFData {
   const totals = calculateInvoiceTotals(
-    items.map((i) => ({ description: i.description, quantity: 1, amount: i.amount })),
+    items.map((i) => ({ description: i.description, details: i.details, quantity: 1, amount: i.amount })),
     { isGstApplied: true, gstRate: 9, discounts: rawDiscounts }
   );
   return {
@@ -106,6 +107,22 @@ describe('invoice PDF layout', () => {
       })
     );
     expect(Buffer.from(bytes.slice(0, 5)).toString('latin1')).toBe('%PDF-');
+  });
+
+  it("a line's What's included bullets are printed under its description", async () => {
+    const pkgA = PHOTOBOOTH_PACKAGES.find((p) => p.id === 'pb-3h-a')!;
+    const bytes = await generateInvoicePDF(
+      invoice({ items: [{ description: pkgA.description, details: pkgA.details, amount: pkgA.price }, { description: 'Photobooth Extension', amount: 100 }] })
+    );
+    const text = await pdfText(bytes);
+    expect(text).toContain('Professional DSLR camera with studio lighting');
+    expect(text).toContain('LCD panel display customisation');
+    expect(await pageCount(bytes)).toBe(1);
+  });
+
+  it('prints dates in Singapore time, so an issue just after midnight is not shown as the day before', async () => {
+    const text = await pdfText(await generateInvoicePDF(invoice({ overrides: { issueDate: new Date('2026-11-11T17:30:00Z') } })));
+    expect(text).toContain('Issued on 12 Nov 2026');
   });
 
   it('many discounts still fit alongside the totals', async () => {

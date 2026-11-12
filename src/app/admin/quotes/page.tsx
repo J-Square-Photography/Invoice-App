@@ -106,6 +106,7 @@ function QuotesPageInner() {
       id: q.id,
       invoiceNumber: q.quoteNumber,
       status: q.status,
+      issueDate: q.issueDate,
       dueDate: q.validUntil,
       paymentMethod: null,
       isGstApplied: q.isGstApplied,

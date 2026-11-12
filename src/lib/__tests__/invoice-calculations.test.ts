@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { roundCents, processInvoiceItem, calculateInvoiceTotals, processDiscounts, parseStoredDiscounts, describeDiscount } from '../invoice-calculations';
+import { roundCents, detailLines, processInvoiceItem, calculateInvoiceTotals, processDiscounts, parseStoredDiscounts, describeDiscount } from '../invoice-calculations';
 
 describe('roundCents', () => {
   it('avoids classic floating point drift', () => {
@@ -276,5 +276,22 @@ describe('deposits', () => {
     });
     expect(result.depositAmount).toBe(0);
     expect(result.totalAmount).toBe(1000);
+  });
+});
+
+describe("line item What's included details", () => {
+  it('splits into one bullet per line, dropping blanks and typed bullet marks', () => {
+    expect(detailLines('• Unlimited prints\n\n  - Props provided  \r\n* LCD panel\n')).toEqual([
+      'Unlimited prints',
+      'Props provided',
+      'LCD panel',
+    ]);
+    expect(detailLines(null)).toEqual([]);
+  });
+
+  it('is cleaned up when the item is processed, and empty text becomes null', () => {
+    expect(processInvoiceItem({ description: 'Booth', details: ' • A \n\nB ', amount: 10 }).details).toBe('A\nB');
+    expect(processInvoiceItem({ description: 'Booth', details: '  \n ', amount: 10 }).details).toBeNull();
+    expect(processInvoiceItem({ description: 'Booth', quantity: 1, unitPrice: 5 }).details).toBeNull();
   });
 });

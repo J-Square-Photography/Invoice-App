@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { parseOptionalDate, isBeforeIssueDate } from '@/lib/time';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       projectId,
+      issueDate,
       dueDate,
       paymentMethod = 'PAYNOW_QR',
       isGstApplied = defaultPaymentConfig.isGstRegistered,
@@ -92,6 +94,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const issue = parseOptionalDate(issueDate);
+    const due = parseOptionalDate(dueDate);
+    if (issue === 'invalid') return NextResponse.json({ error: 'Invalid issue date' }, { status: 400 });
+    if (due === 'invalid') return NextResponse.json({ error: 'Invalid due date' }, { status: 400 });
+    if (due && isBeforeIssueDate(due, issue ?? new Date())) {
+      return NextResponse.json({ error: 'The due date cannot be before the issue date' }, { status: 400 });
+    }
+
     // Verify project exists
     const project = await prisma.project.findUnique({
       where: { id: projectId },
@@ -104,6 +114,7 @@ export async function POST(request: NextRequest) {
 
     const invoice = await createDraftInvoice({
       projectId,
+      issueDate: issue,
       dueDate,
       paymentMethod,
       isGstApplied,

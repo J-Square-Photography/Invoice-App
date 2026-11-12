@@ -6,6 +6,8 @@ import { generateInvoiceNumber, isInvoiceNumberClash } from '@/lib/invoice-numbe
 export interface NewInvoiceInput {
   projectId: string;
   invoiceNumber?: string;
+  /** Defaults to now. */
+  issueDate?: string | Date;
   dueDate: string | Date;
   paymentMethod: string | null;
   isGstApplied: boolean;
@@ -48,7 +50,7 @@ export async function createDraftInvoice(input: NewInvoiceInput) {
           totalAmount: totals.totalAmount,
           paidAmount: 0,
           balanceDue: totals.totalAmount,
-          issueDate: new Date(),
+          issueDate: input.issueDate ? new Date(input.issueDate) : new Date(),
           dueDate: new Date(input.dueDate),
           status: 'DRAFT',
           paymentMethod: input.paymentMethod,

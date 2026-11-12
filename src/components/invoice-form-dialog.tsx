@@ -28,7 +28,7 @@ import {
 import { PHOTOBOOTH_PACKAGES } from '@/lib/photobooth-presets';
 import { SERVICE_CATALOGUE, findServiceItem } from '@/lib/service-presets';
 import { tagLabel } from '@/lib/service-tags';
-import { singaporeDateParts, defaultInvoiceDueDate, addOneMonthSingapore } from '@/lib/time';
+import { singaporeDateParts, singaporeDateString, defaultInvoiceDueDate, addOneMonthSingapore } from '@/lib/time';
 import { logCancelledAction } from '@/lib/log-cancel';
 import {
   getDiscountPresets,
@@ -47,6 +47,10 @@ interface DiscountRow {
 
 interface LineItemInput {
   description: string;
+  /** "What's included" bullets, one per line. */
+  details: string;
+  /** Whether the "What's included" box is open (it opens by itself when there are details). */
+  showDetails?: boolean;
   quantity: number;
   /** The line price: what the client pays for this line. */
   amount: number;
@@ -68,6 +72,8 @@ export interface EditableInvoice {
   id: string;
   invoiceNumber: string;
   status: string;
+  /** When it was issued; shown and editable in the form. */
+  issueDate?: string | Date;
   dueDate: string;
   paymentMethod: string | null;
   isGstApplied: boolean;
@@ -78,7 +84,7 @@ export interface EditableInvoice {
   internalNotes?: string | null;
   paidAmount: number;
   project: { id: string };
-  items: Array<{ description: string; quantity: number; unitPrice: number; amount?: number }>;
+  items: Array<{ description: string; details?: string | null; quantity: number; unitPrice: number; amount?: number }>;
   contract: { id: string } | null;
   /** Discounts saved on the invoice, in the order they were applied. */
   discounts?: unknown;
@@ -87,7 +93,7 @@ export interface EditableInvoice {
 // For quotations the form receives an invoice-shaped record: invoiceNumber is the quote number
 // and dueDate is the valid-until date.
 const DEFAULT_GST_RATE = 9;
-const DEFAULT_ITEM: LineItemInput = { description: 'Photography / Videography Services', quantity: 1, amount: 0 };
+const DEFAULT_ITEM: LineItemInput = { description: 'Photography / Videography Services', details: '', quantity: 1, amount: 0 };
 
 export function InvoiceFormDialog({
   open,
@@ -119,6 +125,9 @@ export function InvoiceFormDialog({
   const [selectedProjectId, setSelectedProjectId] = useState('');
   // Presets are limited to the project's service tags unless this is switched on
   const [showAllServices, setShowAllServices] = useState(false);
+  const [issueDate, setIssueDate] = useState(() => singaporeDateString());
+  // The issue date the form opened with: only sent when changed, so an untouched one keeps its exact time
+  const [initialIssueDate, setInitialIssueDate] = useState(() => singaporeDateString());
   const [dueDate, setDueDate] = useState(() => (kind === 'quote' ? addOneMonthSingapore() : defaultInvoiceDueDate()));
   const [paymentMethod, setPaymentMethod] = useState('PAYNOW_QR');
   const [isGstApplied, setIsGstApplied] = useState(false);
@@ -162,7 +171,10 @@ export function InvoiceFormDialog({
 
     if (invoice) {
       setSelectedProjectId(invoice.project.id);
-      setDueDate(new Date(invoice.dueDate).toISOString().split('T')[0]);
+      const openedIssueDate = singaporeDateString(invoice.issueDate ?? new Date());
+      setIssueDate(openedIssueDate);
+      setInitialIssueDate(openedIssueDate);
+      setDueDate(singaporeDateString(invoice.dueDate));
       setPaymentMethod(invoice.paymentMethod || 'PAYNOW_QR');
       setIsGstApplied(invoice.isGstApplied);
       setGstRate(invoice.gstRate || DEFAULT_GST_RATE);
@@ -180,6 +192,7 @@ export function InvoiceFormDialog({
         invoice.items.length > 0
           ? invoice.items.map((i) => ({
               description: i.description,
+              details: i.details ?? '',
               quantity: i.quantity,
               amount: Number(i.amount ?? i.quantity * Number(i.unitPrice)),
             }))
@@ -187,6 +200,9 @@ export function InvoiceFormDialog({
       );
     } else {
       setSelectedProjectId(defaultProjectId ?? '');
+      const today = singaporeDateString();
+      setIssueDate(today);
+      setInitialIssueDate(today);
       setDueDate(isQuote ? addOneMonthSingapore() : defaultInvoiceDueDate());
       setPaymentMethod('PAYNOW_QR');
       setIsGstApplied(false);
@@ -239,7 +255,7 @@ export function InvoiceFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, invoice?.id]);
 
-  const addItem = () => setItems((prev) => [...prev, { description: '', quantity: 1, amount: 0 }]);
+  const addItem = () => setItems((prev) => [...prev, { description: '', details: '', quantity: 1, amount: 0 }]);
 
   const removeItem = (index: number) => {
     if (items.length <= 1) return;
@@ -252,18 +268,19 @@ export function InvoiceFormDialog({
         if (i !== index) return item;
         if (field === 'quantity') return { ...item, quantity: Math.max(1, parseInt(value.toString() || '1', 10)) };
         if (field === 'amount') return { ...item, amount: Math.max(0, parseFloat(value.toString() || '0')) };
+        if (field === 'details') return { ...item, details: value.toString() };
         return { ...item, description: value.toString() };
       })
     );
   };
 
-  const applyPreset = (preset: { name: string; description: string; price: number }, replaceIndex?: number) => {
+  const applyPreset = (
+    preset: { name: string; description: string; details?: string; price: number },
+    replaceIndex?: number
+  ) => {
+    const line: LineItemInput = { description: preset.description, details: preset.details ?? '', quantity: 1, amount: preset.price };
     if (typeof replaceIndex === 'number' && replaceIndex >= 0 && replaceIndex < items.length) {
-      setItems((prev) =>
-        prev.map((item, i) =>
-          i === replaceIndex ? { description: preset.description, quantity: 1, amount: preset.price } : item
-        )
-      );
+      setItems((prev) => prev.map((item, i) => (i === replaceIndex ? line : item)));
       toast({
         title: 'Preset Applied',
         description: preset.price > 0 ? `${preset.name} set ($${preset.price.toFixed(2)}).` : `${preset.name} set. Enter the quoted price.`,
@@ -277,9 +294,9 @@ export function InvoiceFormDialog({
       (!items[0].description || items[0].description === DEFAULT_ITEM.description) &&
       items[0].amount === 0
     ) {
-      setItems([{ description: preset.description, quantity: 1, amount: preset.price }]);
+      setItems([line]);
     } else {
-      setItems((prev) => [...prev, { description: preset.description, quantity: 1, amount: preset.price }]);
+      setItems((prev) => [...prev, line]);
     }
     toast({
       title: 'Preset Added',
@@ -407,20 +424,31 @@ export function InvoiceFormDialog({
       toast({ title: 'Validation Error', description: 'Please select a project', variant: 'destructive' });
       return;
     }
+    if (issueDate && dueDate && dueDate < issueDate) {
+      toast({
+        title: 'Validation Error',
+        description: `The ${isQuote ? 'valid-until' : 'due'} date cannot be before the issue date.`,
+        variant: 'destructive',
+      });
+      return;
+    }
 
     setSaving(true);
     try {
       let res: Response;
       const base = isQuote ? '/api/quotes' : '/api/invoices';
       // The two differ only in the date field (valid-until vs due) and the payment method
-      const dateAndMethod = isQuote ? { validUntil: dueDate } : { dueDate, paymentMethod };
+      const issueField = issueDate !== initialIssueDate ? { issueDate } : {};
+      const dateAndMethod = isQuote ? { ...issueField, validUntil: dueDate } : { ...issueField, dueDate, paymentMethod };
       // Quotations don't have an internal-notes field
       const internalNotesField = isQuote ? {} : { internalNotes };
       const depositVal = deposit ? parseFloat(deposit) : 0;
+      // What's sent for each line (showDetails is only for the form)
+      const itemsPayload = items.map((i) => ({ description: i.description, details: i.details, quantity: i.quantity, amount: i.amount }));
       if (isEdit && invoice) {
         const body = lockAmounts
           ? { ...dateAndMethod, notes, ...internalNotesField }
-          : { projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, ...internalNotesField, items, discounts: discountInputs, depositAmount: depositVal };
+          : { projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, ...internalNotesField, items: itemsPayload, discounts: discountInputs, depositAmount: depositVal };
         res = await fetch(`${base}/${invoice.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -430,7 +458,7 @@ export function InvoiceFormDialog({
         res = await fetch(base, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, ...internalNotesField, items, discounts: discountInputs, depositAmount: depositVal }),
+          body: JSON.stringify({ projectId: selectedProjectId, ...dateAndMethod, isGstApplied, gstRate, notes, ...internalNotesField, items: itemsPayload, discounts: discountInputs, depositAmount: depositVal }),
         });
       }
 
@@ -538,18 +566,30 @@ export function InvoiceFormDialog({
           {/* Dates & Payment Method */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
+              <Label htmlFor="inv-issueDate">Issue Date *</Label>
+              <Input
+                id="inv-issueDate"
+                type="date"
+                value={issueDate}
+                onChange={(e) => setIssueDate(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="inv-dueDate">{isQuote ? 'Valid Until *' : 'Payment Due Date *'}</Label>
               <Input
                 id="inv-dueDate"
                 type="date"
                 value={dueDate}
+                min={issueDate || undefined}
                 onChange={(e) => setDueDate(e.target.value)}
                 required
               />
             </div>
 
             {!isQuote && (
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="inv-paymentMethod">Primary Payment Method</Label>
               <Select
                 id="inv-paymentMethod"
@@ -731,8 +771,25 @@ export function InvoiceFormDialog({
                     </div>
                   </div>
 
+                  {(item.showDetails || item.details.trim() !== '') && (
+                    <div className="space-y-1">
+                      <Label htmlFor={`item-details-${idx}`} className="text-[11px] font-medium text-neutral-600">
+                        What&apos;s included <span className="font-normal text-neutral-400">(one per line, shown as bullets on the PDF)</span>
+                      </Label>
+                      <Textarea
+                        id={`item-details-${idx}`}
+                        placeholder={'e.g.\nProfessional DSLR camera with studio lighting\nUnlimited prints'}
+                        value={item.details}
+                        onChange={(e) => updateItem(idx, 'details', e.target.value)}
+                        disabled={lockAmounts}
+                        rows={Math.min(10, Math.max(3, item.details.split('\n').length + 1))}
+                        className="min-h-0 text-xs bg-white leading-relaxed"
+                      />
+                    </div>
+                  )}
+
                   {!lockAmounts && (
-                    <div className="flex items-center justify-between px-0.5">
+                    <div className="flex items-center justify-between gap-2 px-0.5">
                       <select
                         aria-label="Swap this item with a service"
                         value=""
@@ -755,6 +812,17 @@ export function InvoiceFormDialog({
                           ))
                         )}
                       </select>
+                      {!item.showDetails && item.details.trim() === '' && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, showDetails: true } : it)))
+                          }
+                          className="shrink-0 inline-flex items-center gap-0.5 text-[11px] font-medium text-neutral-500 hover:text-neutral-900"
+                        >
+                          <Plus className="h-3 w-3" /> What&apos;s included
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

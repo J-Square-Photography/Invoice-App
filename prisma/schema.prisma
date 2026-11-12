@@ -146,6 +146,8 @@ model InvoiceItem {
   invoiceId   String
   invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   description String
+  // "What's included" bullets shown under the description on the PDF, one per line
+  details     String?
   quantity    Int     @default(1)
   unitPrice   Decimal @db.Decimal(12, 2)
   amount      Decimal @db.Decimal(12, 2)
@@ -242,6 +244,8 @@ model QuoteItem {
   quoteId     String
   quote       Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   description String
+  // "What's included" bullets shown under the description on the PDF, one per line
+  details     String?
   quantity    Int     @default(1)
   unitPrice   Decimal @db.Decimal(12, 2)
   amount      Decimal @db.Decimal(12, 2)

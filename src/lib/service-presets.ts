@@ -17,6 +17,8 @@ export interface ServiceItem {
   name: string;
   /** Becomes the invoice line item description. */
   description: string;
+  /** Pre-fills the line's "What's included" bullets, one per line. */
+  details?: string;
   price: number;
 }
 
@@ -113,6 +115,7 @@ const photoboothService: ServiceCatalogueEntry = {
       label: `${p.name} — ${money(p.price)}`,
       name: p.name,
       description: p.description,
+      details: p.details,
       price: p.price,
     })),
   })),

@@ -46,3 +46,48 @@ describe('service presets', () => {
     for (const item of allItems) expect(item.description.length).toBeGreaterThan(5);
   });
 });
+
+describe("photobooth What's included", () => {
+  const detailsOf = (id: string) => PHOTOBOOTH_PACKAGES.find((p) => p.id === id)?.details?.split('\n') ?? [];
+
+  it('Package A includes everything, including crew and LCD panel', () => {
+    const a = detailsOf('pb-2h-a');
+    expect(a).toHaveLength(9);
+    expect(a).toContain('Unlimited prints');
+    expect(a).toContain('Professional media crew on-site');
+    expect(a).toContain('LCD panel display customisation');
+  });
+
+  it('Package B has unlimited prints but no crew or LCD panel', () => {
+    const b = detailsOf('pb-3h-b');
+    expect(b).toContain('Unlimited prints');
+    expect(b).not.toContain('Professional media crew on-site');
+    expect(b).not.toContain('LCD panel display customisation');
+  });
+
+  it('Package C is digital only: no printer, prints or print formats, and no crew or LCD panel', () => {
+    const c = detailsOf('pb-4h-c');
+    expect(c).toEqual([
+      'Professional DSLR camera with studio lighting',
+      'Range of backdrops for your selection',
+      'Complimentary props provided',
+      'Customised graphic designs for photo frame templates',
+    ]);
+  });
+
+  it('every description matches its package: A has crew and prints, B prints but no crew, C digital only with no crew', () => {
+    const wording: Record<string, string> = {
+      'Package A': 'Package A: Full Crew, Setup & Unlimited Instant Prints',
+      'Package B': 'Package B: Setup & Unlimited Prints, Self-Service',
+      'Package C': 'Package C: Digital Only, Setup, No Prints, Self-Service',
+    };
+    for (const p of PHOTOBOOTH_PACKAGES.filter((p) => p.packageType !== 'Add-on')) {
+      expect(p.description).toContain(wording[p.packageType]);
+    }
+  });
+
+  it('add-ons carry no inclusions, and the service dropdown passes package details through', () => {
+    expect(PHOTOBOOTH_PACKAGES.find((p) => p.id === 'pb-addon-extra-hour')?.details).toBeUndefined();
+    expect(findServiceItem('pb-2h-a')?.details).toBe(PHOTOBOOTH_PACKAGES.find((p) => p.id === 'pb-2h-a')?.details);
+  });
+});

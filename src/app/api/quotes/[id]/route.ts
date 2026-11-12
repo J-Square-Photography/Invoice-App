@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { parseOptionalDate, isBeforeIssueDate } from '@/lib/time';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
@@ -37,7 +38,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!existing) return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
 
     const body = await request.json();
-    const { projectId, validUntil, isGstApplied, gstRate, notes, items, discounts, status, deposit, depositAmount } = body;
+    const { projectId, issueDate, validUntil, isGstApplied, gstRate, notes, items, discounts, status, deposit, depositAmount } = body;
 
     // Once converted, the quotation is a record of what was quoted
     if (existing.invoiceId) {
@@ -58,6 +59,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (Number.isNaN(d.getTime())) return NextResponse.json({ error: 'Invalid valid-until date' }, { status: 400 });
       data.validUntil = d;
     }
+    if (issueDate !== undefined) {
+      const issue = parseOptionalDate(issueDate);
+      if (!issue || issue === 'invalid') return NextResponse.json({ error: 'Invalid issue date' }, { status: 400 });
+      data.issueDate = issue;
+    }
+    if (
+      (issueDate !== undefined || validUntil !== undefined) &&
+      isBeforeIssueDate((data.validUntil as Date | undefined) ?? existing.validUntil, (data.issueDate as Date | undefined) ?? existing.issueDate)
+    ) {
+      return NextResponse.json({ error: 'The valid-until date cannot be before the issue date' }, { status: 400 });
+    }
     if (notes !== undefined) data.notes = notes || null;
     if (projectId !== undefined && projectId !== existing.projectId) {
       const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -72,7 +84,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const rawItems =
         items !== undefined
           ? items
-          : existing.items.map((i) => ({ description: i.description, quantity: i.quantity, amount: Number(i.amount) }));
+          : existing.items.map((i) => ({ description: i.description, details: i.details, quantity: i.quantity, amount: Number(i.amount) }));
       if (!Array.isArray(rawItems) || rawItems.length === 0) {
         return NextResponse.json({ error: 'At least one line item is required' }, { status: 400 });
       }

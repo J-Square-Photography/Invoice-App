@@ -1,5 +1,7 @@
 export interface RawInvoiceItemInput {
   description?: string;
+  /** "What's included" bullets, one per line (shown under the description on the PDF). */
+  details?: string | null;
   quantity?: number | string;
   unitPrice?: number | string;
   /**
@@ -12,6 +14,8 @@ export interface RawInvoiceItemInput {
 
 export interface ProcessedInvoiceItem {
   description: string;
+  /** "What's included" bullets joined by newlines, or null when there are none. */
+  details: string | null;
   quantity: number;
   unitPrice: number;
   amount: number;
@@ -62,13 +66,30 @@ export function roundCents(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+/** Splits a line item's "What's included" text into bullets: one per line, trimmed, blank lines
+ * dropped, and any bullet mark typed or pasted in ("•", "-", "*") removed so it isn't doubled. */
+export function detailLines(details: string | null | undefined): string[] {
+  if (!details) return [];
+  return details
+    .split(/\r?\n/)
+    .map((l) => l.trim().replace(/^[•*-]\s*/, '').trim())
+    .filter(Boolean);
+}
+
+function normaliseDetails(details: string | null | undefined): string | null {
+  const lines = detailLines(details);
+  return lines.length ? lines.join('\n') : null;
+}
+
 export function processInvoiceItem(item: RawInvoiceItemInput): ProcessedInvoiceItem {
   const quantity = Math.max(1, parseInt(item.quantity?.toString() || '1', 10));
+  const details = normaliseDetails(item.details);
 
   if (item.amount !== undefined && item.amount !== null && item.amount !== '') {
     const amount = roundCents(Math.max(0, parseFloat(item.amount.toString()) || 0));
     return {
       description: item.description?.trim() || 'Service Item',
+      details,
       quantity,
       unitPrice: roundCents(amount / quantity),
       amount,
@@ -79,6 +100,7 @@ export function processInvoiceItem(item: RawInvoiceItemInput): ProcessedInvoiceI
   const amount = roundCents(quantity * unitPrice);
   return {
     description: item.description?.trim() || 'Service Item',
+    details,
     quantity,
     unitPrice,
     amount,
