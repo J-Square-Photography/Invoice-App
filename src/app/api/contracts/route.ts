@@ -8,6 +8,7 @@ import { hasPermission } from '@/lib/permissions';
 import { generateSigningToken } from '@/lib/audit-crypto';
 import { CONTRACT_TEMPLATES, renderContractTemplate } from '@/lib/contract-templates';
 import { logActivity } from '@/lib/activity-log';
+import { contractPartyName } from '@/lib/client-name';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -124,6 +125,7 @@ export async function POST(request: NextRequest) {
         studio_name: company.companyName.toUpperCase(),
         company_name: invoice.project.client.companyName,
         client_name: invoice.project.client.contactName || invoice.project.client.companyName,
+        client_party: contractPartyName(invoice.project.client),
         project_title: invoice.project.title,
         shoot_date: invoice.project.shootDate
           ? new Date(invoice.project.shootDate).toLocaleDateString('en-SG', { year: 'numeric', month: 'long', day: 'numeric' })

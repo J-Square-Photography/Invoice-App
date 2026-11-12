@@ -18,7 +18,7 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
     defaultTitle: 'Photography Services & Licensing Agreement',
     body: `PHOTOGRAPHY SERVICES & CLIENT LICENSING AGREEMENT
 
-This Agreement is entered into between {{studio_name}} (UEN: {{company_uen}}) and {{company_name}} (Attn: {{client_name}}).
+This Agreement is entered into between {{studio_name}} (UEN: {{company_uen}}) and {{client_party}}.
 
 1. PROJECT SCOPE & DELIVERABLES
 Project: {{project_title}}
@@ -47,7 +47,7 @@ This Agreement shall be governed and interpreted according to the laws of the Re
     defaultTitle: 'Commercial Videography Production & License Agreement',
     body: `COMMERCIAL VIDEOGRAPHY PRODUCTION & LICENSE AGREEMENT
 
-This Production Agreement is executed between {{studio_name}} (UEN: {{company_uen}}) and {{company_name}} (Attn: {{client_name}}).
+This Production Agreement is executed between {{studio_name}} (UEN: {{company_uen}}) and {{client_party}}.
 
 1. PRODUCTION SPECIFICATIONS
 Production Title: {{project_title}}
@@ -80,7 +80,7 @@ This contract constitutes the entire understanding between the parties and is su
     body: `CORPORATE TRAINING WORKSHOP ENGAGEMENT AGREEMENT
 
 Between: {{studio_name}} (UEN: {{company_uen}})
-And: {{company_name}} (Attn: {{client_name}})
+And: {{client_party}}
 
 1. WORKSHOP PROGRAM
 Program: {{project_title}}
@@ -121,7 +121,14 @@ export function renderContractTemplate(
     due_date: 'Upon Completion',
   };
 
-  const merged = { ...defaults, ...variables };
+  const merged: Record<string, string | number | undefined | null> = { ...defaults, ...variables };
+  // How the client is named as a party: "SP Academic Club (Attn: Ms Jacqueline Yeo)" for an
+  // organisation, just "Mr Zhun Hung" for an individual. Bodies written before {{client_party}}
+  // existed spell it out as "{{company_name}} (Attn: {{client_name}})"; that reads the same way.
+  if (merged.client_party === undefined || merged.client_party === null || merged.client_party === '') {
+    merged.client_party = `${merged.company_name} (Attn: ${merged.client_name})`;
+  }
+  rendered = rendered.split('{{company_name}} (Attn: {{client_name}})').join('{{client_party}}');
 
   for (const [key, val] of Object.entries(merged)) {
     const stringVal = val !== undefined && val !== null ? String(val) : '';

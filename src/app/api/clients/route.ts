@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { rankClients } from '@/lib/search-rank';
-import { composeContactName } from '@/lib/client-name';
+import { CLIENT_TYPE, CONTACT_ROLE_MAX_LENGTH, DEFAULT_CLIENT_TYPE, composeContactName, individualListName, parseClientType } from '@/lib/client-name';
 import { logActivity } from '@/lib/activity-log';
 
 const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
@@ -72,16 +72,32 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { companyName, contactName, salutation, firstName, lastName, email, phone, uen, address, socials, internalNotes } = body;
+    const { clientType: rawType, companyName, contactName, contactRole, salutation, firstName, lastName, email, phone, uen, address, socials, internalNotes } = body;
 
-    if (typeof companyName !== 'string' || !companyName.trim()) {
-      return NextResponse.json({ error: 'Client name is required' }, { status: 400 });
+    // Callers that predate client types (e.g. import scripts) create organisations, as before
+    const clientType = rawType === undefined ? DEFAULT_CLIENT_TYPE : parseClientType(rawType);
+    if (!clientType) {
+      return NextResponse.json({ error: 'Choose whether the client is an individual or an organisation' }, { status: 400 });
     }
 
     const nameParts = { salutation: clean(salutation, 40), firstName: clean(firstName, 80), lastName: clean(lastName, 80) };
     // The salutation/given/family boxes are the source of truth when present; a raw contactName
     // (e.g. from an import script) is only used as a fallback so nothing forces the split.
     const composedName = composeContactName(nameParts);
+
+    // An individual is listed under their own name; an organisation needs its name typed in
+    let listName: string;
+    if (clientType === CLIENT_TYPE.INDIVIDUAL) {
+      if (!nameParts.firstName) {
+        return NextResponse.json({ error: "Enter the client's given name" }, { status: 400 });
+      }
+      listName = individualListName(nameParts);
+    } else {
+      if (typeof companyName !== 'string' || !companyName.trim()) {
+        return NextResponse.json({ error: 'Organisation name is required' }, { status: 400 });
+      }
+      listName = companyName.trim();
+    }
 
     // Everything except the name is optional
     const normalizedEmail = typeof email === 'string' && email.trim() ? email.toLowerCase().trim() : null;
@@ -101,12 +117,14 @@ export async function POST(request: NextRequest) {
 
     const client = await prisma.client.create({
       data: {
-        companyName: companyName.trim(),
+        clientType,
+        companyName: listName,
         contactName: composedName || (typeof contactName === 'string' ? contactName.trim() : ''),
+        contactRole: clientType === CLIENT_TYPE.ORGANISATION ? clean(contactRole, CONTACT_ROLE_MAX_LENGTH) : null,
         ...nameParts,
         email: normalizedEmail,
         phone: phone || null,
-        uen: uen || null,
+        uen: clientType === CLIENT_TYPE.ORGANISATION ? uen || null : null,
         address: address ? String(address).trim().slice(0, 300) || null : null,
         socials: socials || null,
         internalNotes: internalNotes || null,

@@ -6,6 +6,7 @@ import { defaultPaymentConfig, type CompanyPaymentConfig } from './payment-confi
 import { generatePayNowPayload, generatePayNowQRDataURL } from './sgqr';
 import { discountName, discountTerms, detailLines } from './invoice-calculations';
 import { loadUnicodeFonts, splitRuns } from './pdf-unicode';
+import { attnName, billToName } from './client-name';
 
 /** Brand typeface (J Square Brand Guide: Montserrat). Read once per warm serverless instance. */
 const FONT_DIR = join(process.cwd(), 'src', 'lib', 'fonts');
@@ -58,8 +59,11 @@ export interface InvoicePDFData {
   balanceDue: number;
   notes?: string | null;
   client: {
+    /** 'INDIVIDUAL' or 'ORGANISATION' (the default): decides the "Bill To" name and whether there's an Attn line */
+    clientType?: string | null;
     companyName: string;
     contactName?: string | null;
+    contactRole?: string | null;
     email?: string | null;
     phone?: string | null;
     uen?: string | null;
@@ -130,6 +134,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
     data.notes,
     data.client.companyName,
     data.client.contactName,
+    data.client.contactRole,
     data.client.email,
     data.client.phone,
     data.client.uen,
@@ -307,11 +312,13 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   // The client's name and contact details always appear in full: shrunk to fit one line where
   // possible, and wrapped onto extra lines (rather than cut short with "...") for anything too long
   // even for that. A client's own legal name is exactly the kind of detail an invoice can't get wrong.
-  const clientName = fitNameBlock(data.client.companyName, 11, fontBold, c1 - 20, 8, 3);
+  // An organisation is billed by its name, "Attn:" its contact person; an individual by their own full name
+  const clientName = fitNameBlock(billToName(data.client), 11, fontBold, c1 - 20, 8, 3);
+  const attn = attnName(data.client);
   const nameExtraLines = clientName.lines.length - 1;
   // Contact details are all optional, so only the ones that exist are drawn
   const contactBlocks = [
-    data.client.contactName?.trim() ? `Attn: ${data.client.contactName.trim()}` : '',
+    attn ? `Attn: ${attn}` : '',
     data.client.email?.trim() ? `Email: ${data.client.email.trim()}` : '',
     data.client.phone?.trim() ? `Phone: ${data.client.phone.trim()}` : '',
   ]

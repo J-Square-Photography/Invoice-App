@@ -59,6 +59,7 @@ export async function GET(
       isSigned: contract.isSigned,
       signedAt: contract.signedAt,
       client: {
+        clientType: contract.invoice.project.client.clientType,
         companyName: contract.invoice.project.client.companyName,
         contactName: contract.invoice.project.client.contactName,
         email: contract.invoice.project.client.email,

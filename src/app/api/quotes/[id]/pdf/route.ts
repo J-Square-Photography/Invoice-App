@@ -39,8 +39,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       balanceDue: quote.totalAmount,
       notes: quote.notes,
       client: {
+        clientType: quote.project.client.clientType,
         companyName: quote.project.client.companyName,
         contactName: quote.project.client.contactName,
+        contactRole: quote.project.client.contactRole,
         email: quote.project.client.email,
         phone: quote.project.client.phone,
         uen: quote.project.client.uen,

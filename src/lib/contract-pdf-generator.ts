@@ -1,6 +1,7 @@
 import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
 import { defaultPaymentConfig, type CompanyPaymentConfig } from './payment-config';
 import { loadUnicodeFonts, measureText, patchPage } from './pdf-unicode';
+import { billToName, isIndividual } from './client-name';
 
 export interface ContractPDFData {
   title: string;
@@ -8,6 +9,7 @@ export interface ContractPDFData {
   isSigned: boolean;
   signedAt?: string | Date | null;
   client: {
+    clientType?: string | null;
     companyName: string;
     contactName: string;
     email?: string | null;
@@ -113,8 +115,8 @@ export async function generateContractPDF(data: ContractPDFData): Promise<Uint8A
   });
 
   let metaY = y - 5;
-  page.drawText('Client Organization:', { x: 60, y: metaY, size: 8.5, font: fontBold, color: darkGray });
-  page.drawText(data.client.companyName, { x: 170, y: metaY, size: 8.5, font: fontRegular, color: black });
+  page.drawText(isIndividual(data.client) ? 'Client:' : 'Client Organization:', { x: 60, y: metaY, size: 8.5, font: fontBold, color: darkGray });
+  page.drawText(billToName(data.client), { x: 170, y: metaY, size: 8.5, font: fontRegular, color: black });
 
   page.drawText('Invoice Reference:', { x: 340, y: metaY, size: 8.5, font: fontBold, color: darkGray });
   page.drawText(data.invoiceNumber, { x: 440, y: metaY, size: 8.5, font: fontBold, color: black });

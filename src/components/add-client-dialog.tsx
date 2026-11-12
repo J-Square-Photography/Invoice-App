@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { PhoneInput } from '@/components/phone-input';
-import { SalutationNameFields, EMPTY_NAME_FIELDS, type NameFieldsValue } from '@/components/salutation-name-fields';
+import { EMPTY_NAME_FIELDS } from '@/components/salutation-name-fields';
+import { ClientIdentityFields, type ClientIdentityValue } from '@/components/client-identity-fields';
+import { CLIENT_TYPE } from '@/lib/client-name';
 import { FieldTag } from '@/components/field-tag';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +23,6 @@ export interface CreatedClient {
 }
 
 const EMPTY_FORM = {
-  companyName: '',
   email: '',
   phone: '',
   uen: '',
@@ -29,6 +30,8 @@ const EMPTY_FORM = {
   socials: '',
   internalNotes: '',
 };
+
+const EMPTY_IDENTITY: ClientIdentityValue = { clientType: '', companyName: '', contactRole: '', ...EMPTY_NAME_FIELDS };
 
 /** The "Add Client" form, shared between the Clients page and anywhere else (e.g. project creation)
  * that needs to create a client on the spot without navigating away. */
@@ -41,20 +44,20 @@ export function AddClientDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (client: CreatedClient) => void;
-  /** Prefills Company Name, e.g. with whatever the user had already typed into a search box. */
+  /** Prefills the name (organisation name, or given name once Individual is picked), e.g. with what was typed into a search box. */
   initialCompanyName?: string;
 }) {
   const [isCreating, setIsCreating] = useState(false);
   const [formData, setFormData] = useState(EMPTY_FORM);
-  const [nameFields, setNameFields] = useState<NameFieldsValue>(EMPTY_NAME_FIELDS);
+  const [identity, setIdentity] = useState<ClientIdentityValue>(EMPTY_IDENTITY);
   const { toast } = useToast();
 
   // Each time the dialog opens fresh, start from the given name (if any) rather than whatever
   // was left over from the last time it was opened.
   useEffect(() => {
     if (open) {
-      setFormData({ ...EMPTY_FORM, companyName: initialCompanyName?.trim() || '' });
-      setNameFields(EMPTY_NAME_FIELDS);
+      setFormData(EMPTY_FORM);
+      setIdentity({ ...EMPTY_IDENTITY, companyName: initialCompanyName?.trim() || '' });
     }
   }, [open, initialCompanyName]);
 
@@ -71,12 +74,16 @@ export function AddClientDialog({
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!identity.clientType) {
+      toast({ title: 'Choose a client type', description: 'Is this client an individual or an organisation?', variant: 'destructive' });
+      return;
+    }
     try {
       setIsCreating(true);
       const res = await fetch('/api/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, ...nameFields }),
+        body: JSON.stringify({ ...formData, ...identity }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -105,11 +112,7 @@ export function AddClientDialog({
         </DialogHeader>
         <form onSubmit={handleCreate} className="space-y-4 py-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="ac-companyName">Client / Company Name <FieldTag required /></Label>
-              <Input id="ac-companyName" name="companyName" required value={formData.companyName} onChange={handleInputChange} />
-            </div>
-            <SalutationNameFields idPrefix="ac" value={nameFields} onChange={setNameFields} />
+            <ClientIdentityFields idPrefix="ac" value={identity} onChange={setIdentity} />
             <div className="space-y-2">
               <Label htmlFor="ac-email">Email <FieldTag /></Label>
               <Input id="ac-email" name="email" type="email" value={formData.email} onChange={handleInputChange} />
@@ -118,10 +121,12 @@ export function AddClientDialog({
               <Label htmlFor="ac-phone">Phone <FieldTag /></Label>
               <PhoneInput id="ac-phone" value={formData.phone} onChange={(v) => setFormData((prev) => ({ ...prev, phone: v }))} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="ac-uen">UEN <FieldTag /></Label>
-              <Input id="ac-uen" name="uen" value={formData.uen} onChange={handleInputChange} />
-            </div>
+            {identity.clientType === CLIENT_TYPE.ORGANISATION && (
+              <div className="space-y-2">
+                <Label htmlFor="ac-uen">UEN <FieldTag /></Label>
+                <Input id="ac-uen" name="uen" value={formData.uen} onChange={handleInputChange} />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="ac-address">Address <FieldTag /></Label>
               <Input id="ac-address" name="address" maxLength={300} placeholder="e.g. 123 Example Road, #01-23, Singapore 123456" value={formData.address} onChange={handleInputChange} />

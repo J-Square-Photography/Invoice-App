@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { deleteImpact } from '@/lib/delete-impact';
-import { composeContactName } from '@/lib/client-name';
+import { CLIENT_TYPE, CONTACT_ROLE_MAX_LENGTH, clientTypeOf, composeContactName, individualListName, parseClientType, type ClientType } from '@/lib/client-name';
 import { hasPermission } from '@/lib/permissions';
 import { logActivity } from '@/lib/activity-log';
 
@@ -60,7 +60,22 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { companyName, contactName, salutation, firstName, lastName, email, phone, uen, address, socials, internalNotes } = body;
+    const { clientType: rawType, companyName, contactName, contactRole, salutation, firstName, lastName, email, phone, uen, address, socials, internalNotes } = body;
+
+    const current = await prisma.client.findUnique({
+      where: { id },
+      select: { clientType: true, salutation: true, firstName: true, lastName: true },
+    });
+    if (!current) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+
+    let clientType: ClientType = clientTypeOf(current);
+    if (rawType !== undefined) {
+      const parsed = parseClientType(rawType);
+      if (!parsed) {
+        return NextResponse.json({ error: 'Choose whether the client is an individual or an organisation' }, { status: 400 });
+      }
+      clientType = parsed;
+    }
 
     // If email is changing, check uniqueness
     if (typeof email === 'string' && email.trim()) {
@@ -77,12 +92,7 @@ export async function PATCH(
     }
 
     const updateData: Record<string, unknown> = {};
-    if (companyName !== undefined) {
-      if (typeof companyName !== 'string' || !companyName.trim()) {
-        return NextResponse.json({ error: 'Client name is required' }, { status: 400 });
-      }
-      updateData.companyName = companyName.trim();
-    }
+    if (rawType !== undefined) updateData.clientType = clientType;
     // The salutation/given/family boxes are the source of truth for the printed name whenever the
     // caller touches any of them. A raw contactName sent on its own (e.g. an import script) still
     // works and takes precedence, so nothing here can silently overwrite it with a blank name.
@@ -90,20 +100,40 @@ export async function PATCH(
     if (salutation !== undefined) updateData.salutation = clean(salutation, 40);
     if (firstName !== undefined) updateData.firstName = clean(firstName, 80);
     if (lastName !== undefined) updateData.lastName = clean(lastName, 80);
+    const nameParts = {
+      salutation: salutation !== undefined ? (updateData.salutation as string | null) : current.salutation,
+      firstName: firstName !== undefined ? (updateData.firstName as string | null) : current.firstName,
+      lastName: lastName !== undefined ? (updateData.lastName as string | null) : current.lastName,
+    };
     if (contactName !== undefined) {
       updateData.contactName = typeof contactName === 'string' ? contactName.trim() : '';
     } else if (touchesNameParts) {
-      const current = await prisma.client.findUnique({ where: { id }, select: { salutation: true, firstName: true, lastName: true } });
-      if (!current) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
-      updateData.contactName = composeContactName({
-        salutation: salutation !== undefined ? (updateData.salutation as string | null) : current.salutation,
-        firstName: firstName !== undefined ? (updateData.firstName as string | null) : current.firstName,
-        lastName: lastName !== undefined ? (updateData.lastName as string | null) : current.lastName,
-      });
+      updateData.contactName = composeContactName(nameParts);
+    }
+
+    if (clientType === CLIENT_TYPE.INDIVIDUAL) {
+      // An individual is listed under their own name, kept in step with the name boxes. They have
+      // no separate representative role or company registration number.
+      if (rawType !== undefined || touchesNameParts) {
+        if (!nameParts.firstName) {
+          return NextResponse.json({ error: "Enter the client's given name" }, { status: 400 });
+        }
+        updateData.companyName = individualListName(nameParts);
+        updateData.contactRole = null;
+        updateData.uen = null;
+      }
+    } else {
+      if (companyName !== undefined) {
+        if (typeof companyName !== 'string' || !companyName.trim()) {
+          return NextResponse.json({ error: 'Organisation name is required' }, { status: 400 });
+        }
+        updateData.companyName = companyName.trim();
+      }
+      if (contactRole !== undefined) updateData.contactRole = clean(contactRole, CONTACT_ROLE_MAX_LENGTH);
     }
     if (email !== undefined) updateData.email = typeof email === 'string' && email.trim() ? email.toLowerCase().trim() : null;
     if (phone !== undefined) updateData.phone = phone || null;
-    if (uen !== undefined) updateData.uen = uen || null;
+    if (uen !== undefined && clientType === CLIENT_TYPE.ORGANISATION) updateData.uen = uen || null;
     if (address !== undefined) updateData.address = address ? String(address).trim().slice(0, 300) || null : null;
     if (socials !== undefined) updateData.socials = socials || null;
     if (internalNotes !== undefined) updateData.internalNotes = internalNotes || null;

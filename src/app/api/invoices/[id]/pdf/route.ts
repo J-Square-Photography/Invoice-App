@@ -55,8 +55,10 @@ export async function GET(
       balanceDue: invoice.balanceDue,
       notes: invoice.notes,
       client: {
+        clientType: invoice.project.client.clientType,
         companyName: invoice.project.client.companyName,
         contactName: invoice.project.client.contactName,
+        contactRole: invoice.project.client.contactRole,
         email: invoice.project.client.email,
         phone: invoice.project.client.phone,
         uen: invoice.project.client.uen,

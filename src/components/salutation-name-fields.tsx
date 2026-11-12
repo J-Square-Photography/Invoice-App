@@ -28,10 +28,18 @@ export function SalutationNameFields({
   value,
   onChange,
   idPrefix,
+  label = 'Contact Person',
+  required = false,
+  hint = 'Leave family name blank if this client only uses one name.',
 }: {
   value: NameFieldsValue;
   onChange: (next: NameFieldsValue) => void;
   idPrefix: string;
+  /** e.g. "Name" for an individual client, "Contact Person (Representative)" for an organisation */
+  label?: string;
+  /** When true the given name must be filled in */
+  required?: boolean;
+  hint?: string;
 }) {
   // Lazily read once at mount: the surrounding dialog fully remounts this component whenever it
   // switches to a different client (it always passes back through "view" mode first), so a fresh
@@ -40,7 +48,7 @@ export function SalutationNameFields({
 
   return (
     <div className="space-y-2 sm:col-span-2">
-      <Label htmlFor={`${idPrefix}-firstName`}>Contact Person <FieldTag /></Label>
+      <Label htmlFor={`${idPrefix}-firstName`}>{label} <FieldTag required={required} /></Label>
       <div className="grid grid-cols-1 sm:grid-cols-[5.5rem_1fr_1fr] gap-2">
         <Select
           aria-label="Salutation"
@@ -66,6 +74,7 @@ export function SalutationNameFields({
         <Input
           id={`${idPrefix}-firstName`}
           placeholder="Given / first name"
+          required={required}
           value={value.firstName}
           onChange={(e) => onChange({ ...value, firstName: e.target.value })}
         />
@@ -86,7 +95,7 @@ export function SalutationNameFields({
           className="max-w-xs"
         />
       )}
-      <p className="text-xs text-neutral-500">Leave family name blank if this client only uses one name.</p>
+      {hint && <p className="text-xs text-neutral-500">{hint}</p>}
     </div>
   );
 }

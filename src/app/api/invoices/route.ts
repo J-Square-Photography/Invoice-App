@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       project: {
         include: {
           client: {
-            select: { id: true, companyName: true, contactName: true, email: true },
+            select: { id: true, clientType: true, companyName: true, contactName: true, contactRole: true, email: true },
           },
         },
       },

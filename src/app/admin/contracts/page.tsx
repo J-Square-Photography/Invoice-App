@@ -36,6 +36,7 @@ import { CONTRACT_TEMPLATES, renderContractTemplate } from '@/lib/contract-templ
 import { SortSelect, useSavedChoice } from '@/components/sort-filter';
 import { byDate, byNumber, byText, sortItems, type SortChoice } from '@/lib/sorting';
 import { logCancelledAction } from '@/lib/log-cancel';
+import { contractPartyName } from '@/lib/client-name';
 
 interface InvoiceOption {
   id: string;
@@ -44,8 +45,10 @@ interface InvoiceOption {
   project: {
     title: string;
     client: {
+      clientType?: string;
       companyName: string;
       contactName: string;
+      contactRole?: string | null;
     };
   };
   contract: { id: string } | null;
@@ -202,6 +205,7 @@ function ContractsPageInner() {
         ...studio,
         company_name: invoice.project.client.companyName,
         client_name: invoice.project.client.contactName || invoice.project.client.companyName,
+        client_party: contractPartyName(invoice.project.client),
         project_title: invoice.project.title,
         shoot_date: invoice.project.shootDate
           ? new Date(invoice.project.shootDate).toLocaleDateString('en-SG', { year: 'numeric', month: 'long', day: 'numeric' })

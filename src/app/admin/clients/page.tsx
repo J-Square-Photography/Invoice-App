@@ -11,15 +11,18 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
-import { Search, UserPlus, Loader2, Building2, ExternalLink, FileSpreadsheet } from 'lucide-react';
+import { Search, UserPlus, Loader2, Building2, User, ExternalLink, FileSpreadsheet } from 'lucide-react';
+import { CLIENT_TYPE_LABELS, billToName, clientTypeOf, isIndividual } from '@/lib/client-name';
 import { downloadCsv } from '@/lib/csv';
 import { SortSelect, PeriodSelect, useSavedChoice } from '@/components/sort-filter';
 import { byDate, byNumber, byText, inPeriod, sortItems, PERIODS, type SortChoice } from '@/lib/sorting';
 
 interface ClientListItem {
   id: string;
+  clientType: string;
   companyName: string;
   contactName: string;
+  contactRole: string | null;
   email: string | null;
   phone: string | null;
   uen: string | null;
@@ -31,8 +34,8 @@ interface ClientListItem {
 const SORT_CHOICES: SortChoice<ClientListItem>[] = [
   { value: 'newest', label: 'Date Added: Newest to Oldest', compare: byDate((c) => c.createdAt, 'desc') },
   { value: 'oldest', label: 'Date Added: Oldest to Newest', compare: byDate((c) => c.createdAt, 'asc') },
-  { value: 'name-az', label: 'Company Name: A to Z', compare: byText((c) => c.companyName) },
-  { value: 'name-za', label: 'Company Name: Z to A', compare: byText((c) => c.companyName, 'desc') },
+  { value: 'name-az', label: 'Client Name: A to Z', compare: byText((c) => c.companyName) },
+  { value: 'name-za', label: 'Client Name: Z to A', compare: byText((c) => c.companyName, 'desc') },
   { value: 'projects-most', label: 'Number of Projects: Most to Fewest', compare: byNumber((c) => c._count?.projects ?? 0, 'desc') },
   { value: 'projects-least', label: 'Number of Projects: Fewest to Most', compare: byNumber((c) => c._count?.projects ?? 0, 'asc') },
 ];
@@ -111,8 +114,18 @@ function ClientsPageInner() {
 
   const exportCsv = () => {
     downloadCsv(`clients-${new Date().toISOString().slice(0, 10)}.csv`, [
-      ['Client / Company', 'Contact', 'Email', 'Phone', 'UEN', 'Address', 'Projects'],
-      ...visibleClients.map((c) => [c.companyName, c.contactName, c.email, c.phone, c.uen, c.address, c._count?.projects ?? 0]),
+      ['Client', 'Type', 'Contact Person', 'Contact Role', 'Email', 'Phone', 'UEN', 'Address', 'Projects'],
+      ...visibleClients.map((c) => [
+        billToName(c),
+        CLIENT_TYPE_LABELS[clientTypeOf(c)],
+        isIndividual(c) ? '' : c.contactName,
+        isIndividual(c) ? '' : c.contactRole,
+        c.email,
+        c.phone,
+        c.uen,
+        c.address,
+        c._count?.projects ?? 0,
+      ]),
     ]);
   };
 
@@ -150,7 +163,7 @@ function ClientsPageInner() {
           size="sm"
           onClick={() => setIncompleteOnly((v) => !v)}
           className="whitespace-nowrap text-xs"
-          title="Show only clients that are missing a contact name, email, phone or address"
+          title="Show only clients that are missing a contact person (organisations), email, phone or address"
         >
           Missing info{incompleteCount > 0 ? ` (${incompleteCount})` : ''}
         </Button>
@@ -161,8 +174,8 @@ function ClientsPageInner() {
           <table className="w-full caption-bottom text-sm">
             <thead className="[&_tr]:border-b">
               <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Company</th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Contact</th>
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Client</th>
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Contact Person</th>
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Email</th>
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Phone</th>
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">UEN</th>
@@ -192,17 +205,31 @@ function ClientsPageInner() {
                         onClick={() => openClient(client.id)}
                         className="font-medium hover:underline text-primary flex items-center gap-2 text-left"
                       >
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        {client.companyName}
+                        {isIndividual(client) ? (
+                          <User className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="Individual" />
+                        ) : (
+                          <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="Organisation" />
+                        )}
+                        {billToName(client)}
                       </button>
+                      <div className="mt-0.5 pl-6 text-xs text-muted-foreground">{CLIENT_TYPE_LABELS[clientTypeOf(client)]}</div>
                       {missingClientInfo(client).length > 0 && (
                         <div className="mt-1 text-xs italic text-amber-600">Missing: {missingClientInfo(client).join(', ')}</div>
                       )}
                     </td>
-                    <td className="p-4 align-middle">{client.contactName || '-'}</td>
+                    <td className="p-4 align-middle">
+                      {isIndividual(client) ? (
+                        <span className="text-muted-foreground">Self</span>
+                      ) : (
+                        <>
+                          <div>{client.contactName || '-'}</div>
+                          {client.contactRole && <div className="text-xs text-muted-foreground">{client.contactRole}</div>}
+                        </>
+                      )}
+                    </td>
                     <td className="p-4 align-middle">{client.email || '-'}</td>
                     <td className="p-4 align-middle">{client.phone || '-'}</td>
-                    <td className="p-4 align-middle">{client.uen || '-'}</td>
+                    <td className="p-4 align-middle">{isIndividual(client) ? <span className="text-muted-foreground">n/a</span> : client.uen || '-'}</td>
                     <td className="p-4 align-middle">
                       <Badge variant="secondary">{client._count?.projects ?? 0}</Badge>
                     </td>

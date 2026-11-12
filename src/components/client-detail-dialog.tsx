@@ -9,7 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { PhoneInput } from '@/components/phone-input';
-import { SalutationNameFields, type NameFieldsValue } from '@/components/salutation-name-fields';
+import { ClientIdentityFields, type ClientIdentityValue } from '@/components/client-identity-fields';
+import { CLIENT_TYPE, CLIENT_TYPE_LABELS, clientTypeOf, isIndividual, parseClientType } from '@/lib/client-name';
 import { FieldTag } from '@/components/field-tag';
 import { DeleteImpactWarning } from '@/components/delete-impact';
 import type { DeleteImpact } from '@/lib/delete-impact';
@@ -39,8 +40,10 @@ interface Project {
 
 interface ClientDetail {
   id: string;
+  clientType: string;
   companyName: string;
   contactName: string;
+  contactRole: string | null;
   salutation: string | null;
   firstName: string | null;
   lastName: string | null;
@@ -54,11 +57,7 @@ interface ClientDetail {
   projects: Project[];
 }
 
-interface ClientForm {
-  companyName: string;
-  salutation: string;
-  firstName: string;
-  lastName: string;
+interface ClientForm extends ClientIdentityValue {
   email: string;
   phone: string;
   uen: string;
@@ -68,7 +67,9 @@ interface ClientForm {
 }
 
 const toForm = (c: ClientDetail): ClientForm => ({
+  clientType: parseClientType(c.clientType) ?? '',
   companyName: c.companyName || '',
+  contactRole: c.contactRole || '',
   // A client saved before this feature has a printed name but no split parts recorded. Rather
   // than guess how to split it (risking a wrongly-placed family name), the whole thing goes into
   // Given Name and Family Name stays blank: saving with no further changes reproduces the exact
@@ -162,6 +163,10 @@ export function ClientDetailDialog({
   const saveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form || !clientId) return;
+    if (!form.clientType) {
+      toast({ title: 'Choose a client type', description: 'Is this client an individual or an organisation?', variant: 'destructive' });
+      return;
+    }
     try {
       setIsSaving(true);
       const res = await fetch(`/api/clients/${clientId}`, {
@@ -243,14 +248,10 @@ export function ClientDetailDialog({
               </DialogHeader>
               <form onSubmit={saveClient} className="space-y-4 py-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cd-companyName">Client / Company Name <FieldTag required /></Label>
-                    <Input id="cd-companyName" name="companyName" required value={form.companyName} onChange={handleFormChange} />
-                  </div>
-                  <SalutationNameFields
+                  <ClientIdentityFields
                     idPrefix="cd"
-                    value={{ salutation: form.salutation, firstName: form.firstName, lastName: form.lastName }}
-                    onChange={(next: NameFieldsValue) => setForm((prev) => (prev ? { ...prev, ...next } : prev))}
+                    value={form}
+                    onChange={(next) => setForm((prev) => (prev ? { ...prev, ...next } : prev))}
                   />
                   <div className="space-y-2">
                     <Label htmlFor="cd-email">Email <FieldTag /></Label>
@@ -260,10 +261,12 @@ export function ClientDetailDialog({
                     <Label htmlFor="cd-phone">Phone <FieldTag /></Label>
                     <PhoneInput id="cd-phone" value={form.phone} onChange={(v) => setForm((prev) => (prev ? { ...prev, phone: v } : prev))} />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cd-uen">UEN <FieldTag /></Label>
-                    <Input id="cd-uen" name="uen" value={form.uen} onChange={handleFormChange} />
-                  </div>
+                  {form.clientType === CLIENT_TYPE.ORGANISATION && (
+                    <div className="space-y-2">
+                      <Label htmlFor="cd-uen">UEN <FieldTag /></Label>
+                      <Input id="cd-uen" name="uen" value={form.uen} onChange={handleFormChange} />
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="cd-socials">Socials / Links <FieldTag /></Label>
                     <Input id="cd-socials" name="socials" placeholder="e.g. instagram.com/company" value={form.socials} onChange={handleFormChange} />
@@ -293,7 +296,7 @@ export function ClientDetailDialog({
               <DialogHeader>
                 <DialogTitle>{client.companyName}</DialogTitle>
                 <DialogDescription>
-                  Client since {formatDate(client.createdAt)}
+                  {CLIENT_TYPE_LABELS[clientTypeOf(client)]} &middot; Client since {formatDate(client.createdAt)}
                 </DialogDescription>
                 {missingClientInfo(client).length > 0 && (
                   <p className="text-xs italic text-amber-600">Missing: {missingClientInfo(client).join(', ')}</p>
@@ -310,8 +313,11 @@ export function ClientDetailDialog({
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <Label>Contact Name</Label>
-                    <div className="font-medium">{client.contactName || '-'}</div>
+                    <Label>{isIndividual(client) ? 'Full Name' : 'Contact Person'}</Label>
+                    <div className="font-medium">
+                      {client.contactName || '-'}
+                      {!isIndividual(client) && client.contactRole && <span className="font-normal text-neutral-500">, {client.contactRole}</span>}
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <Label>Email</Label>
@@ -323,10 +329,12 @@ export function ClientDetailDialog({
                     <Label>Phone</Label>
                     <div className="font-medium">{client.phone || '-'}</div>
                   </div>
-                  <div className="space-y-1">
-                    <Label>UEN</Label>
-                    <div className="font-medium">{client.uen || '-'}</div>
-                  </div>
+                  {!isIndividual(client) && (
+                    <div className="space-y-1">
+                      <Label>UEN</Label>
+                      <div className="font-medium">{client.uen || '-'}</div>
+                    </div>
+                  )}
                   <div className="sm:col-span-2">
                     <Label>Address</Label>
                     <div className="font-medium">{client.address || '-'}</div>
